@@ -81,6 +81,14 @@ Open the dashboard, log in, and:
   UUID/name — perfect for people who joined late.
 - Residents touch the kiosk to **Subscribe / Unsubscribe / Get Latest**
   (self-service redelivery of the newest package).
+- **Program sends ahead of time**: each package card has *Schedule…* — pick
+  a date and time (shown in your local time **and SLT**), e.g. compose the
+  newsletter on Tuesday, program delivery for Thursday 8pm. Programmed sends
+  appear in an *Upcoming* strip (cancellable) and on the **Calendar** tab, a
+  month view of programmed and past sends. Firing is driven by the kiosk's
+  5-minute heartbeat (plus a 60 s timer when self-hosted, and the dashboard
+  itself), so scheduling works on every deployment including Vercel's free
+  tier — expect delivery to start within ~5 minutes of the programmed time.
 
 ### Invitation HUDs (the intended workflow for events)
 

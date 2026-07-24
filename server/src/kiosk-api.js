@@ -42,6 +42,26 @@ async function touchKiosk() {
   await db.run('UPDATE kiosk SET last_seen = ? WHERE id = 1', [db.now()]);
 }
 
+// Enqueue deliveries for any schedule whose time has come. Called from the
+// kiosk heartbeat/work endpoints (a reliable ~5-min clock on every
+// deployment, including serverless), the admin overview, and — when
+// self-hosted — a 60 s interval in index.js. Returns how many fired.
+async function fireDueSchedules() {
+  const due = await db.all(
+    "SELECT * FROM schedules WHERE status = 'pending' AND send_at <= ?", [db.now()]);
+  let fired = 0;
+  for (const s of due) {
+    const r = await db.run(`
+      INSERT INTO deliveries (package_id, uuid, status, queued_at)
+      SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1
+    `, [s.package_id, db.now()]);
+    await db.run("UPDATE schedules SET status = 'sent', fired_at = ? WHERE id = ?",
+      [db.now(), s.id]);
+    fired += r.changes;
+  }
+  return fired;
+}
+
 // ---------- endpoints ----------
 
 // Registration + heartbeat + inventory report.
@@ -57,6 +77,7 @@ router.post('/hello', wrap(async (req, res) => {
     await db.run('UPDATE kiosk SET inventory = ? WHERE id = 1', [JSON.stringify(clean)]);
   }
   await touchKiosk();
+  await fireDueSchedules(); // before counting, so fresh sends are picked up now
   const queued = (await db.get("SELECT COUNT(*) AS n FROM deliveries WHERE status = 'queued'")).n;
   const lookups = (await db.get("SELECT COUNT(*) AS n FROM lookups WHERE status = 'pending'")).n;
   res.json({ latest: await latestPackage(), queued, lookups });
@@ -65,6 +86,7 @@ router.post('/hello', wrap(async (req, res) => {
 // Work batch: pending lookups + a few queued deliveries (claimed as inflight).
 router.get('/work', wrap(async (req, res) => {
   await touchKiosk();
+  await fireDueSchedules();
   // Requeue deliveries a dead kiosk claimed and never reported.
   const cutoff = new Date(Date.now() - config.inflightRequeueMs).toISOString();
   await db.run(`
@@ -167,4 +189,4 @@ router.get('/latest', wrap(async (req, res) => {
   res.json({ latest: pkg });
 }));
 
-module.exports = { router, pingKiosk, kioskOnline, kioskRow, UUID_RE, wrap };
+module.exports = { router, pingKiosk, kioskOnline, kioskRow, UUID_RE, wrap, fireDueSchedules };

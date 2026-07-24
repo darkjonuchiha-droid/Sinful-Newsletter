@@ -3,7 +3,7 @@ const express = require('express');
 const db = require('./storage');
 const config = require('./config');
 const auth = require('./auth');
-const { pingKiosk, kioskOnline, kioskRow, UUID_RE, wrap } = require('./kiosk-api');
+const { pingKiosk, kioskOnline, kioskRow, UUID_RE, wrap, fireDueSchedules } = require('./kiosk-api');
 
 const router = express.Router();
 
@@ -37,6 +37,9 @@ router.use(auth.requireAdmin);
 // ---------- overview ----------
 
 router.get('/overview', wrap(async (req, res) => {
+  // The dashboard is another clock for the scheduler — useful when the
+  // kiosk is temporarily offline (deliveries still queue up correctly).
+  if (await fireDueSchedules() > 0) await pingKiosk();
   const k = await kioskRow();
   const sending = await db.all(`
     SELECT p.id, p.name,
@@ -218,6 +221,43 @@ router.post('/packages/:id/sendto', wrap(async (req, res) => {
     [id, uuid, 'queued', db.now()]);
   await pingKiosk();
   res.json({ ok: true, kioskOnline: await kioskOnline() });
+}));
+
+// ---------- schedules ----------
+
+// Program a package to be sent at a future time.
+router.post('/packages/:id/schedule', wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const pkg = await db.get('SELECT id FROM packages WHERE id = ?', [id]);
+  if (!pkg) return res.status(404).json({ error: 'no such package' });
+  const t = new Date(String((req.body && req.body.send_at) || ''));
+  if (isNaN(t)) return res.status(400).json({ error: 'invalid date/time' });
+  if (t.getTime() < Date.now() - 60000) {
+    return res.status(400).json({ error: 'that time is in the past' });
+  }
+  const sid = await db.insert(
+    "INSERT INTO schedules (package_id, send_at, status, created_at) VALUES (?, ?, 'pending', ?)",
+    [id, t.toISOString(), db.now()]);
+  res.json({ ok: true, id: sid });
+}));
+
+// All schedules (pending + history) with package names, newest-relevant first.
+router.get('/schedules', wrap(async (req, res) => {
+  const rows = await db.all(`
+    SELECT s.id, s.package_id, s.send_at, s.status, s.fired_at, p.name
+    FROM schedules s JOIN packages p ON p.id = s.package_id
+    ORDER BY s.send_at DESC LIMIT 300
+  `);
+  res.json({ schedules: rows });
+}));
+
+// Cancel a pending schedule.
+router.delete('/schedules/:id', wrap(async (req, res) => {
+  const r = await db.run(
+    "UPDATE schedules SET status = 'cancelled' WHERE id = ? AND status = 'pending'",
+    [Number(req.params.id)]);
+  if (!r.changes) return res.status(404).json({ error: 'no pending schedule with that id' });
+  res.json({ ok: true });
 }));
 
 // ---------- deliveries / kiosk ----------

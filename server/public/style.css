@@ -288,6 +288,54 @@ textarea { resize: vertical; width: 100%; }
   font-size: .82rem; margin-bottom: .6rem;
 }
 
+/* ---------- schedules / calendar ---------- */
+.upcoming { display: grid; gap: .45rem; margin-bottom: 1rem; }
+.upcoming-item {
+  display: flex; align-items: center; gap: .7rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
+  border-radius: 10px;
+  padding: .5rem .85rem;
+  font-size: .86rem;
+}
+.upcoming-item b { color: var(--gold); }
+.upcoming-item .when { color: var(--muted); }
+.upcoming-item button { margin-left: auto; }
+
+.cal-nav { display: flex; gap: .4rem; }
+.cal-weekdays {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+  margin-bottom: 4px; text-align: center;
+  color: var(--muted); font-size: .72rem;
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-cell {
+  min-height: 92px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: .35rem .45rem;
+  display: flex; flex-direction: column; gap: .25rem;
+  overflow: hidden;
+}
+.cal-cell.blank { background: transparent; border-color: transparent; }
+.cal-cell.today { border-color: var(--rose); box-shadow: 0 0 0 1px var(--rose) inset; }
+.cal-day { font-size: .75rem; color: var(--muted); }
+.cal-cell.today .cal-day { color: var(--rose); font-weight: 700; }
+.cal-chip {
+  font-size: .7rem;
+  border-radius: 6px;
+  padding: .15rem .4rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cal-chip.pending { background: #d9a44118; border: 1px solid #d9a44155; color: var(--gold); cursor: pointer; }
+.cal-chip.pending:hover { background: #d9a44130; }
+.cal-chip.sent { background: var(--rose-soft); border: 1px solid #ff3d6e44; color: var(--rose); }
+#schedule-dt { width: 100%; color-scheme: dark; margin-bottom: .35rem; }
+@media (max-width: 640px) { .cal-cell { min-height: 64px; } }
+
 /* ---------- toasts ---------- */
 .toasts {
   position: fixed; right: 1rem; bottom: 1rem; z-index: 60;

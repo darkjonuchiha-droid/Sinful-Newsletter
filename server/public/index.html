@@ -38,6 +38,7 @@
   <nav class="tabs">
     <button class="tab active" data-tab="packages">Packages</button>
     <button class="tab" data-tab="subscribers">Subscribers</button>
+    <button class="tab" data-tab="calendar">Calendar</button>
   </nav>
 
   <!-- ---------- PACKAGES ---------- -->
@@ -49,6 +50,7 @@
       </div>
       <button id="btn-new-package" class="btn btn-primary">+ New package</button>
     </div>
+    <div id="upcoming" class="upcoming hidden"></div>
     <div id="package-list" class="package-list"></div>
     <p id="packages-empty" class="empty hidden">No packages yet — create your first one.</p>
   </main>
@@ -74,6 +76,39 @@
       </table>
     </div>
   </main>
+
+  <!-- ---------- CALENDAR ---------- -->
+  <main id="tab-calendar" class="tabpane hidden">
+    <div class="pane-head">
+      <div class="pane-title">
+        <h2 id="cal-title">Calendar</h2>
+        <p class="hint">Programmed and past sends — times in your local time. Tap a pending send to cancel it.</p>
+      </div>
+      <div class="cal-nav">
+        <button id="cal-prev" class="btn btn-ghost btn-mini">‹</button>
+        <button id="cal-today" class="btn btn-ghost btn-mini">Today</button>
+        <button id="cal-next" class="btn btn-ghost btn-mini">›</button>
+      </div>
+    </div>
+    <div class="cal-weekdays">
+      <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span>
+      <span>Fri</span><span>Sat</span><span>Sun</span>
+    </div>
+    <div id="cal-grid" class="cal-grid"></div>
+  </main>
+</div>
+
+<!-- ======================= SCHEDULE MODAL ======================= -->
+<div id="schedule-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="schedule-title"></p>
+    <input id="schedule-dt" type="datetime-local">
+    <p id="schedule-slt" class="hint"></p>
+    <div class="editor-actions">
+      <button id="btn-schedule-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="btn-schedule-save" class="btn btn-primary">Schedule</button>
+    </div>
+  </div>
 </div>
 
 <!-- ======================= PACKAGE EDITOR ======================= -->

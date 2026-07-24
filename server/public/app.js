@@ -8,12 +8,24 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
 const state = {
   packages: [],
   subscribers: [],
+  schedules: [],
   kiosk: { online: false, inventory: [] },
   overview: null,
   editing: null,      // null | {id?} package being edited
   editItems: new Set,
+  scheduling: null,   // package id being scheduled
+  calMonth: null,     // Date at the 1st of the displayed month
   pollTimer: null,
 };
+
+// SL advertises event times in SLT (Pacific). Show both to avoid mistakes.
+const fmtLocal = (iso) => new Date(iso).toLocaleString([], {
+  weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+});
+const fmtSLT = (iso) => new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Los_Angeles',
+  weekday: 'short', hour: 'numeric', minute: '2-digit',
+}).format(new Date(iso));
 
 // ---------------- api ----------------
 
@@ -59,7 +71,7 @@ async function showApp() {
 }
 
 async function refreshAll() {
-  await Promise.all([loadOverview(), loadPackages(), loadSubscribers(), loadKiosk()]);
+  await Promise.all([loadOverview(), loadPackages(), loadSubscribers(), loadKiosk(), loadSchedules()]);
 }
 
 async function pollTick() {
@@ -67,6 +79,8 @@ async function pollTick() {
     await loadOverview();
     // While a blast is running, keep package stats live.
     if (state.overview && state.overview.sending.length) await loadPackages();
+    // Keep schedule state fresh whenever any are pending.
+    if (state.schedules.some(s => s.status === 'pending')) await loadSchedules();
   } catch { /* transient */ }
 }
 
@@ -133,6 +147,7 @@ function renderPackages() {
           </div>
           <div class="pkg-actions">
             <button class="btn btn-primary btn-mini" data-act="send">Send to all</button>
+            <button class="btn btn-ghost btn-mini" data-act="schedule">Schedule…</button>
             <button class="btn btn-ghost btn-mini" data-act="test">Send to one…</button>
             <button class="btn btn-ghost btn-mini" data-act="edit">Edit</button>
             <button class="btn btn-ghost btn-mini" data-act="delete">Delete</button>
@@ -151,6 +166,7 @@ $('#package-list').addEventListener('click', async (e) => {
   const act = btn.dataset.act;
 
   if (act === 'edit') return openEditor(pkg);
+  if (act === 'schedule') return openSchedule(pkg);
 
   if (act === 'delete') {
     if (!await confirmModal(`Delete package “${pkg.name}”? Its delivery history is removed too.`)) return;
@@ -340,6 +356,146 @@ async function loadKiosk() {
   state.kiosk = await api('/kiosk-status');
 }
 
+// ---------------- schedules ----------------
+
+async function loadSchedules() {
+  state.schedules = (await api('/schedules')).schedules;
+  renderUpcoming();
+  if (!$('#tab-calendar').classList.contains('hidden')) renderCalendar();
+}
+
+function renderUpcoming() {
+  const wrap = $('#upcoming');
+  const pending = state.schedules
+    .filter(s => s.status === 'pending')
+    .sort((a, b) => a.send_at.localeCompare(b.send_at));
+  wrap.classList.toggle('hidden', pending.length === 0);
+  wrap.innerHTML = pending.map(s => `
+    <div class="upcoming-item" data-sid="${s.id}">
+      <span>📅</span>
+      <span><b>${esc(s.name)}</b></span>
+      <span class="when">${esc(fmtLocal(s.send_at))} (${esc(fmtSLT(s.send_at))} SLT)</span>
+      <button class="btn btn-ghost btn-mini" data-act="cancel-schedule">Cancel</button>
+    </div>`).join('');
+}
+
+$('#upcoming').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act=cancel-schedule]');
+  if (!btn) return;
+  cancelSchedule(Number(btn.closest('.upcoming-item').dataset.sid));
+});
+
+async function cancelSchedule(sid) {
+  const s = state.schedules.find(x => x.id === sid);
+  if (!s) return;
+  if (!await confirmModal(`Cancel the programmed send of “${s.name}” (${fmtLocal(s.send_at)})?`)) return;
+  try {
+    await api(`/schedules/${sid}`, { method: 'DELETE' });
+    toast('Programmed send cancelled', 'ok');
+    loadSchedules();
+  } catch (err) { toast(err.message, 'err'); }
+}
+
+// -- schedule modal --
+
+function openSchedule(pkg) {
+  state.scheduling = pkg.id;
+  $('#schedule-title').textContent = `Schedule “${pkg.name}” — pick delivery date & time:`;
+  // Default: tomorrow, same hour, minutes at :00 (local time).
+  const d = new Date(Date.now() + 24 * 3600 * 1000);
+  d.setMinutes(0, 0, 0);
+  const pad = (n) => String(n).padStart(2, '0');
+  $('#schedule-dt').value =
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  updateSltHint();
+  $('#schedule-overlay').classList.remove('hidden');
+}
+
+function updateSltHint() {
+  const v = $('#schedule-dt').value;
+  const el = $('#schedule-slt');
+  if (!v || isNaN(new Date(v))) { el.textContent = ''; return; }
+  el.textContent = `= ${fmtSLT(new Date(v).toISOString())} SLT (Second Life time)`;
+}
+$('#schedule-dt').addEventListener('input', updateSltHint);
+
+$('#btn-schedule-save').addEventListener('click', async () => {
+  const v = $('#schedule-dt').value;
+  if (!v || isNaN(new Date(v))) return toast('Pick a valid date and time', 'err');
+  try {
+    await api(`/packages/${state.scheduling}/schedule`, {
+      method: 'POST', body: { send_at: new Date(v).toISOString() },
+    });
+    $('#schedule-overlay').classList.add('hidden');
+    toast('Send programmed', 'ok');
+    loadSchedules();
+  } catch (err) { toast(err.message, 'err'); }
+});
+$('#btn-schedule-cancel').addEventListener('click', () =>
+  $('#schedule-overlay').classList.add('hidden'));
+
+// -- month calendar --
+
+function renderCalendar() {
+  if (!state.calMonth) {
+    const t = new Date();
+    state.calMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+  }
+  const y = state.calMonth.getFullYear();
+  const m = state.calMonth.getMonth();
+  $('#cal-title').textContent = state.calMonth.toLocaleString([], { month: 'long', year: 'numeric' });
+
+  const firstOffset = (new Date(y, m, 1).getDay() + 6) % 7; // Monday-start
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const today = new Date();
+  const isToday = (d) =>
+    today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
+
+  // Bucket schedules by local calendar day of this month.
+  const byDay = {};
+  for (const s of state.schedules) {
+    if (s.status === 'cancelled') continue;
+    const t = new Date(s.send_at);
+    if (t.getFullYear() === y && t.getMonth() === m) {
+      (byDay[t.getDate()] = byDay[t.getDate()] || []).push(s);
+    }
+  }
+
+  let html = '';
+  for (let i = 0; i < firstOffset; i++) html += '<div class="cal-cell blank"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const chips = (byDay[d] || [])
+      .sort((a, b) => a.send_at.localeCompare(b.send_at))
+      .map(s => {
+        const hm = new Date(s.send_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const cls = s.status === 'pending' ? 'pending' : 'sent';
+        const title = s.status === 'pending'
+          ? `Programmed: ${fmtLocal(s.send_at)} (${fmtSLT(s.send_at)} SLT) — tap to cancel`
+          : `Sent ${fmtLocal(s.fired_at || s.send_at)}`;
+        return `<span class="cal-chip ${cls}" data-sid="${s.id}" title="${esc(title)}">${hm} ${esc(s.name)}</span>`;
+      }).join('');
+    html += `<div class="cal-cell ${isToday(d) ? 'today' : ''}"><span class="cal-day">${d}</span>${chips}</div>`;
+  }
+  $('#cal-grid').innerHTML = html;
+}
+
+$('#cal-grid').addEventListener('click', (e) => {
+  const chip = e.target.closest('.cal-chip.pending');
+  if (chip) cancelSchedule(Number(chip.dataset.sid));
+});
+$('#cal-prev').addEventListener('click', () => {
+  state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() - 1, 1);
+  renderCalendar();
+});
+$('#cal-next').addEventListener('click', () => {
+  state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + 1, 1);
+  renderCalendar();
+});
+$('#cal-today').addEventListener('click', () => {
+  state.calMonth = null;
+  renderCalendar();
+});
+
 // ---------------- confirm modal ----------------
 
 function confirmModal(text) {
@@ -360,8 +516,10 @@ function confirmModal(text) {
 
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
-  $('#tab-packages').classList.toggle('hidden', t.dataset.tab !== 'packages');
-  $('#tab-subscribers').classList.toggle('hidden', t.dataset.tab !== 'subscribers');
+  for (const name of ['packages', 'subscribers', 'calendar']) {
+    $(`#tab-${name}`).classList.toggle('hidden', t.dataset.tab !== name);
+  }
+  if (t.dataset.tab === 'calendar') renderCalendar();
 }));
 
 $('#login-form').addEventListener('submit', async (e) => {

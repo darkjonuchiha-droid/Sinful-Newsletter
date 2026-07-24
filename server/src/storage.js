@@ -56,6 +56,14 @@ function schemaSql(kind) {
       ip    TEXT PRIMARY KEY,
       count INTEGER NOT NULL,
       last  TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS schedules (
+      id         ${id},
+      package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+      send_at    TEXT NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL,
+      fired_at   TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(status, send_at)`,
   ];
 }
 
