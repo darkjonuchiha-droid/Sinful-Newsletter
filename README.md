@@ -82,6 +82,27 @@ Open the dashboard, log in, and:
 - Residents touch the kiosk to **Subscribe / Unsubscribe / Get Latest**
   (self-service redelivery of the newest package).
 
+### Invitation HUDs (the intended workflow for events)
+
+Instead of sending loose items, send **one invitation object** that
+recipients wear and open — like a sealed envelope:
+
+1. Build a prim styled as your invitation (envelope, ticket, rose…).
+2. Drop into it: [kiosk/invitation-hud.lsl](kiosk/invitation-hud.lsl) plus
+   the contents — notecard, landmark, gifts. Make the contents **copy** so
+   the invite can be re-opened.
+3. Configure the top of the script if you like: event region + position
+   (opening then also pops the world map at the venue), auto-detach on/off.
+4. Name the object (that name becomes the folder recipients get), take it,
+   drop it into the **kiosk prim**, and attach it to a package in the
+   dashboard — just that one object.
+5. Send. Subscribers receive the invitation; when they attach it as a HUD
+   it asks *"Open it now?"* — opening delivers the folder with everything
+   inside, shows the map to the venue, and (by default) removes itself.
+
+Tip: put a line like "Wear the enclosed invitation and touch it!" in the
+package message, since it arrives like any object.
+
 ### Resilience model
 
 - **Server down:** kiosk keeps accepting signups (queued in LinksetData,
