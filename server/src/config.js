@@ -15,6 +15,8 @@ const config = {
   port: Number(process.env.PORT) || 8710,
   adminPassword: process.env.ADMIN_PASSWORD || '',
   kioskToken: process.env.KIOSK_TOKEN || '',
+  // Postgres (Neon/Supabase/...) when set; embedded SQLite otherwise.
+  databaseUrl: process.env.DATABASE_URL || '',
   dbPath: process.env.DB_PATH || path.join(__dirname, '..', 'data', 'newsletter.db'),
   // Kiosk counts as offline when silent longer than this.
   kioskOfflineMs: 12 * 60 * 1000,
@@ -29,6 +31,11 @@ if (!config.adminPassword || config.adminPassword === 'change-me') {
 }
 if (!config.kioskToken || config.kioskToken === 'change-me-too') {
   console.error('Set a real KIOSK_TOKEN in server/.env (copy .env.example).');
+  process.exit(1);
+}
+if (process.env.VERCEL && !config.databaseUrl) {
+  console.error('Running on Vercel requires DATABASE_URL (serverless has no persistent disk '
+    + 'for SQLite). Add a Neon/Postgres integration and set DATABASE_URL.');
   process.exit(1);
 }
 

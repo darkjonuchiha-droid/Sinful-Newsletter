@@ -1,0 +1,112 @@
+'use strict';
+// Storage abstraction with two drivers, chosen by environment:
+//   - DATABASE_URL set   -> Postgres (Neon, Supabase, local pg, ...)
+//   - otherwise          -> embedded SQLite via node:sqlite (self-hosted)
+//
+// Portability rules used by all queries in this codebase:
+//   - placeholders are `?` (converted to $n for Postgres here)
+//   - timestamps are ISO-8601 UTC strings supplied from JS (db.now()),
+//     stored in TEXT columns -> identical behavior in both engines
+//   - case-insensitive matching uses LOWER(), never COLLATE NOCASE
+//   - no engine-specific SQL functions in query strings
+
+const config = require('./config');
+
+const NOW = () => new Date().toISOString();
+
+function schemaSql(kind) {
+  const id = kind === 'pg' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+  return [
+    `CREATE TABLE IF NOT EXISTS subscribers (
+      uuid       TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      active     INTEGER NOT NULL DEFAULT 1,
+      source     TEXT NOT NULL DEFAULT 'admin',
+      created_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS packages (
+      id         ${id},
+      name       TEXT NOT NULL,
+      message    TEXT NOT NULL DEFAULT '',
+      items      TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS deliveries (
+      id         ${id},
+      package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+      uuid       TEXT NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'queued',
+      queued_at  TEXT NOT NULL,
+      claimed_at TEXT,
+      sent_at    TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_deliveries_pkg ON deliveries(package_id, status)`,
+    `CREATE TABLE IF NOT EXISTS lookups (
+      id         ${id},
+      kind       TEXT NOT NULL,
+      query      TEXT NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS kiosk (
+      id        INTEGER PRIMARY KEY,
+      url       TEXT,
+      last_seen TEXT,
+      inventory TEXT NOT NULL DEFAULT '[]')`,
+    `INSERT INTO kiosk (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+    `CREATE TABLE IF NOT EXISTS login_attempts (
+      ip    TEXT PRIMARY KEY,
+      count INTEGER NOT NULL,
+      last  TEXT NOT NULL)`,
+  ];
+}
+
+async function initSqlite() {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { DatabaseSync } = require('node:sqlite');
+  fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
+  const db = new DatabaseSync(config.dbPath);
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA wal_autocheckpoint = 1000');
+  db.exec('PRAGMA foreign_keys = ON');
+  for (const s of schemaSql('sqlite')) db.exec(s);
+  return {
+    kind: 'sqlite',
+    async all(sql, p = []) { return db.prepare(sql).all(...p); },
+    async get(sql, p = []) { return db.prepare(sql).get(...p); },
+    async run(sql, p = []) { return { changes: db.prepare(sql).run(...p).changes }; },
+    async insert(sql, p = []) { return Number(db.prepare(sql).run(...p).lastInsertRowid); },
+  };
+}
+
+async function initPg() {
+  const { Pool, types } = require('pg');
+  // COUNT()/SUM() come back as int8 -> parse to JS numbers (values here are tiny).
+  types.setTypeParser(20, v => parseInt(v, 10));
+  const pool = new Pool({ connectionString: config.databaseUrl, max: 3 });
+  for (const s of schemaSql('pg')) await pool.query(s);
+  const conv = (sql) => { let i = 0; return sql.replace(/\?/g, () => '$' + (++i)); };
+  return {
+    kind: 'pg',
+    async all(sql, p = []) { return (await pool.query(conv(sql), p)).rows; },
+    async get(sql, p = []) { return (await pool.query(conv(sql), p)).rows[0]; },
+    async run(sql, p = []) { return { changes: (await pool.query(conv(sql), p)).rowCount }; },
+    async insert(sql, p = []) {
+      return (await pool.query(conv(sql) + ' RETURNING id', p)).rows[0].id;
+    },
+  };
+}
+
+let impl = null;
+const ready = (config.databaseUrl ? initPg() : initSqlite()).then(d => { impl = d; return d; });
+ready.catch(e => console.error('Storage init failed:', e.message));
+
+async function ensure() { if (!impl) await ready; return impl; }
+
+module.exports = {
+  ready,
+  now: NOW,
+  all: async (sql, p) => (await ensure()).all(sql, p),
+  get: async (sql, p) => (await ensure()).get(sql, p),
+  run: async (sql, p) => (await ensure()).run(sql, p),
+  insert: async (sql, p) => (await ensure()).insert(sql, p),
+};

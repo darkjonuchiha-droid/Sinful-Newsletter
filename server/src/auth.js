@@ -62,21 +62,24 @@ function requireKiosk(req, res, next) {
   res.status(401).json({ error: 'bad kiosk token' });
 }
 
-// Simple per-IP login throttle: 5 failures locks for 60 s.
-const failures = new Map();
-function loginAllowed(ip) {
-  const f = failures.get(ip);
-  return !(f && f.count >= 5 && Date.now() - f.last < 60000);
+// Per-IP login throttle: 5 failures locks for 60 s. Stored in the DB so it
+// also works on serverless, where in-process memory is per-instance.
+const db = require('./storage');
+async function loginAllowed(ip) {
+  const r = await db.get('SELECT * FROM login_attempts WHERE ip = ?', [ip]);
+  return !(r && r.count >= 5 && Date.now() - Date.parse(r.last) < 60000);
 }
-function loginFailed(ip) {
-  const f = failures.get(ip) || { count: 0, last: 0 };
-  if (Date.now() - f.last > 60000) f.count = 0;
-  f.count++;
-  f.last = Date.now();
-  failures.set(ip, f);
+async function loginFailed(ip) {
+  const r = await db.get('SELECT * FROM login_attempts WHERE ip = ?', [ip]);
+  const stale = !r || Date.now() - Date.parse(r.last) > 60000;
+  const count = stale ? 1 : r.count + 1;
+  await db.run(`
+    INSERT INTO login_attempts (ip, count, last) VALUES (?, ?, ?)
+    ON CONFLICT (ip) DO UPDATE SET count = EXCLUDED.count, last = EXCLUDED.last
+  `, [ip, count, db.now()]);
 }
-function loginSucceeded(ip) {
-  failures.delete(ip);
+async function loginSucceeded(ip) {
+  await db.run('DELETE FROM login_attempts WHERE ip = ?', [ip]);
 }
 
 module.exports = {

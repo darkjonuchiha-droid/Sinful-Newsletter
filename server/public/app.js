@@ -120,7 +120,7 @@ function renderPackages() {
       <article class="pkg-card" data-id="${p.id}">
         <div class="pkg-top">
           <h3 class="pkg-name">${esc(p.name)}</h3>
-          <span class="pkg-date">created ${esc((p.created_at || '').slice(0, 16))} UTC</span>
+          <span class="pkg-date">created ${esc((p.created_at || '').slice(0, 16).replace('T', ' '))} UTC</span>
         </div>
         <p class="pkg-msg">${esc(p.message || '(no message)')}</p>
         <div class="pkg-items">${chips}</div>

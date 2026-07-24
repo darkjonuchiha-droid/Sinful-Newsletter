@@ -21,18 +21,38 @@ Both deliver **packages**: an IM message plus a folder of attachments
 
 ## Hub setup (v2)
 
-### 1. Server
+### 1. Server — pick a deployment style
+
+The hub picks its database automatically: if `DATABASE_URL` is set it uses
+**Postgres**; otherwise it uses **embedded SQLite** (a single local file).
+Same code, both tested.
+
+**Option A — free cloud (GitHub + Vercel + Neon), recommended:**
+
+1. Push this repo to GitHub.
+2. On [vercel.com](https://vercel.com): *New Project* → import the repo →
+   set **Root Directory** to `server`.
+3. In the project's *Storage* tab, add the **Neon** (Postgres) integration —
+   it sets `DATABASE_URL` automatically. Free tiers of both are far more
+   than this app needs.
+4. In *Settings → Environment Variables*, add `ADMIN_PASSWORD` and
+   `KIOSK_TOKEN` (long random strings).
+5. Deploy. Your hub is at `https://<project>.vercel.app` — HTTPS, no port
+   forwarding, no machine to keep on. Every `git push` redeploys.
+
+**Option B — self-hosted (your own PC or a VPS):**
 
 ```bash
 cd server
 cp .env.example .env    # then EDIT .env: set ADMIN_PASSWORD and KIOSK_TOKEN
 npm install
-npm start               # http://localhost:8710
+npm start               # http://localhost:8710  (SQLite in server/data/)
 ```
 
-Expose the port to the internet (port forward, VPS, or reverse proxy —
-Second Life's simulators must be able to reach it). HTTPS via a reverse
-proxy is recommended if exposed publicly.
+Expose the port to the internet (port forward + dynamic DNS, reverse proxy,
+or a Cloudflare Tunnel — Second Life's simulators must be able to reach it).
+You can also point a self-hosted install at Postgres by setting
+`DATABASE_URL` in `.env`.
 
 ### 2. Kiosk
 
@@ -93,8 +113,10 @@ usage instructions are in the script header and the design doc under
 ## Development
 
 - Design docs: `docs/superpowers/specs/`
-- Server: Express + built-in `node:sqlite` (WAL mode), no other dependencies.
-  DB file: `server/data/newsletter.db` (gitignored).
+- Server: Express + a storage layer (`server/src/storage.js`) with two
+  drivers — built-in `node:sqlite` (WAL mode) or Postgres via `pg`, chosen
+  by `DATABASE_URL`. Local SQLite file: `server/data/newsletter.db`
+  (gitignored). Vercel entry: `server/api/index.js` + `server/vercel.json`.
 - Admin UI: vanilla JS single page in `server/public/`, no build step.
 - Smoke test: start the server, then exercise `/api/*` — see the curl
   sequence in the design doc's API section for the expected flow
