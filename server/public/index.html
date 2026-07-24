@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sinful Newsletter — Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,600;1,9..144,700&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💋</text></svg>">
+</head>
+<body>
+
+<!-- ======================= LOGIN ======================= -->
+<section id="view-login" class="login-wrap hidden">
+  <form id="login-form" class="login-card" autocomplete="off">
+    <h1 class="masthead">Sinful<span>Newsletter</span></h1>
+    <p class="login-sub">hub administration</p>
+    <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit" class="btn btn-primary btn-wide">Enter</button>
+    <p id="login-error" class="login-error"></p>
+  </form>
+</section>
+
+<!-- ======================= APP ======================= -->
+<div id="view-app" class="app hidden">
+  <header class="topbar">
+    <h1 class="masthead masthead-small">Sinful<span>Newsletter</span></h1>
+    <div class="topbar-right">
+      <div id="kiosk-pill" class="pill pill-off" title="">
+        <span class="pill-dot"></span><span id="kiosk-pill-text">kiosk</span>
+      </div>
+      <button id="btn-logout" class="btn btn-ghost">Log out</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="packages">Packages</button>
+    <button class="tab" data-tab="subscribers">Subscribers</button>
+  </nav>
+
+  <!-- ---------- PACKAGES ---------- -->
+  <main id="tab-packages" class="tabpane">
+    <div class="pane-head">
+      <div class="pane-title">
+        <h2>Packages</h2>
+        <p class="hint">A package = message + attachments (landmarks, notecards, objects) delivered as a folder.</p>
+      </div>
+      <button id="btn-new-package" class="btn btn-primary">+ New package</button>
+    </div>
+    <div id="package-list" class="package-list"></div>
+    <p id="packages-empty" class="empty hidden">No packages yet — create your first one.</p>
+  </main>
+
+  <!-- ---------- SUBSCRIBERS ---------- -->
+  <main id="tab-subscribers" class="tabpane hidden">
+    <div class="pane-head">
+      <div class="pane-title">
+        <h2>Subscribers <span id="sub-count" class="count-chip"></span></h2>
+        <p class="hint">Add by UUID or legacy name — names are resolved by the in-world kiosk.</p>
+      </div>
+    </div>
+    <div class="sub-toolbar">
+      <input id="sub-add-input" type="text" placeholder='UUID or legacy name, e.g. "Lelouch Resident"'>
+      <button id="btn-sub-add" class="btn btn-primary">Add</button>
+      <input id="sub-search" type="search" placeholder="Search…">
+    </div>
+    <div id="pending-lookups" class="pending-lookups hidden"></div>
+    <div class="table-wrap">
+      <table class="sub-table">
+        <thead><tr><th>Name</th><th>UUID</th><th>Source</th><th>Active</th><th></th></tr></thead>
+        <tbody id="sub-rows"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- ======================= PACKAGE EDITOR ======================= -->
+<div id="editor-overlay" class="overlay hidden">
+  <div class="editor">
+    <h2 id="editor-title" class="editor-title">New package</h2>
+    <label class="field">
+      <span>Name <em>(becomes the folder name subscribers receive)</em></span>
+      <input id="pkg-name" type="text" maxlength="60" placeholder="e.g. Midnight Masquerade — Invitation">
+    </label>
+    <label class="field">
+      <span>Message <em id="pkg-msg-count">0 / 800</em></span>
+      <textarea id="pkg-message" rows="7" maxlength="800"
+        placeholder="Sent as an instant message with the folder…"></textarea>
+    </label>
+    <div class="field">
+      <span>Attachments <em>(items currently inside the kiosk prim)</em></span>
+      <div id="pkg-kiosk-warn" class="inline-warn hidden"></div>
+      <div id="pkg-items" class="item-grid"></div>
+    </div>
+    <div class="editor-actions">
+      <button id="btn-pkg-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="btn-pkg-save" class="btn btn-primary">Save package</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= CONFIRM MODAL ======================= -->
+<div id="confirm-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="confirm-text"></p>
+    <div class="editor-actions">
+      <button id="btn-confirm-no" class="btn btn-ghost">Cancel</button>
+      <button id="btn-confirm-yes" class="btn btn-danger">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

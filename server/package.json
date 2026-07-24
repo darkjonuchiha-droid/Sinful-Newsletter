@@ -1,0 +1,16 @@
+{
+  "name": "sinful-newsletter-hub",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Web-managed Second Life newsletter hub — pairs with the in-world kiosk LSL script",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
