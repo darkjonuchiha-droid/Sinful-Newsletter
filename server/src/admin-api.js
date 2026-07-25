@@ -337,6 +337,10 @@ router.post('/packages/:id/send', wrap(async (req, res) => {
     AND NOT EXISTS (SELECT 1 FROM deliveries d2
       WHERE d2.package_id = ? AND d2.uuid = s.uuid AND d2.status = 'queued')`;
 
+  // Optional per-send only-online override (NULL = use the package's flag).
+  let oo = null;
+  if (req.body && 'only_online' in req.body) oo = req.body.only_online ? 1 : 0;
+
   let queued = 0;
   if (listIds.length) {
     for (const lid of listIds) {
@@ -346,19 +350,19 @@ router.post('/packages/:id/send', wrap(async (req, res) => {
     }
     for (const lid of listIds) {
       const r = await db.run(`
-        INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id)
-        SELECT ?, s.uuid, 'queued', ?, ? FROM subscribers s
+        INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id, only_online)
+        SELECT ?, s.uuid, 'queued', ?, ?, ? FROM subscribers s
         JOIN list_members m ON m.uuid = s.uuid AND m.list_id = ?
         WHERE s.active = 1 AND s.shadowbanned = 0 ${notAlreadyQueued}
-      `, [id, db.now(), lid, lid, id]);
+      `, [id, db.now(), lid, oo, lid, id]);
       queued += r.changes;
     }
   } else {
     const r = await db.run(`
-      INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id)
-      SELECT ?, s.uuid, 'queued', ?, 0 FROM subscribers s
+      INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id, only_online)
+      SELECT ?, s.uuid, 'queued', ?, 0, ? FROM subscribers s
       WHERE s.active = 1 AND s.shadowbanned = 0 ${notAlreadyQueued}
-    `, [id, db.now(), id]);
+    `, [id, db.now(), oo, id]);
     queued = r.changes;
   }
   await pingKiosk();
@@ -445,7 +449,16 @@ router.get('/deliveries', wrap(async (req, res) => {
     FROM deliveries d LEFT JOIN subscribers s ON s.uuid = d.uuid
     WHERE d.package_id = ? ORDER BY d.id DESC LIMIT 100
   `, [pkgId]);
-  res.json({ deliveries: rows, stats: await packageStats(pkgId) });
+  // Audiences this package was sent to, with ids so the UI can re-send.
+  const audiences = (await db.all(`
+    SELECT DISTINCT d.list_id, l.name FROM deliveries d
+    LEFT JOIN lists l ON l.id = d.list_id
+    WHERE d.package_id = ? AND d.list_id IS NOT NULL
+  `, [pkgId])).map(a => ({
+    list_id: a.list_id,
+    name: a.list_id === 0 ? 'All subscribers' : a.name, // null name = deleted list
+  }));
+  res.json({ deliveries: rows, stats: await packageStats(pkgId), audiences });
 }));
 
 // NOTE: named /kiosk-status (not /kiosk) so it can't be captured by the

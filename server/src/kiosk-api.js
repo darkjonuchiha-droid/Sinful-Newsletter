@@ -118,7 +118,8 @@ router.get('/work', wrap(async (req, res) => {
     "SELECT id, kind, query FROM lookups WHERE status = 'pending' ORDER BY id LIMIT 5");
 
   const rows = await db.all(`
-    SELECT d.id, d.uuid, p.name, p.message, p.items, p.only_online
+    SELECT d.id, d.uuid, p.name, p.message, p.items,
+      COALESCE(d.only_online, p.only_online) AS only_online
     FROM deliveries d JOIN packages p ON p.id = d.package_id
     WHERE d.status = 'queued' ORDER BY d.id LIMIT 3
   `);

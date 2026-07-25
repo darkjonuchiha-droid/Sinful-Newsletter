@@ -846,9 +846,11 @@ async function cancelSchedule(sid) {
 // -- delivery log modal --
 
 let logPkgId = null;
+let logPkg = null;
 
 async function openLog(pkg) {
   logPkgId = pkg.id;
+  logPkg = pkg;
   $('#log-title').textContent = `Deliveries — ${pkg.name}`;
   $('#log-overlay').classList.remove('hidden');
   await renderLog();
@@ -861,6 +863,25 @@ async function renderLog() {
   $('#log-stats').textContent =
     `${s.sent || 0} delivered · ${s.pending || 0} pending · ${s.skipped || 0} skipped (offline) · ${s.failed || 0} failed` +
     ` — pending means the kiosk hasn't picked it up yet (touch the kiosk → Sync to hurry it).`;
+  // Audiences the package went to, each re-sendable with an online-only choice.
+  const oldChecks = {}; // preserve checkbox state across refreshes
+  document.querySelectorAll('#log-audiences input[data-relist-oo]').forEach(cb => {
+    oldChecks[cb.dataset.relistOo] = cb.checked;
+  });
+  $('#log-audiences').innerHTML = (data.audiences || []).map(a => {
+    const key = String(a.list_id);
+    const deleted = a.name === null;
+    const checked = key in oldChecks ? oldChecks[key] : !!(logPkg && logPkg.only_online);
+    return `<div class="audience-row ${deleted ? 'deleted' : ''}">
+      <span>📢 <b>${esc(a.name || '(deleted list)')}</b></span>
+      <label title="Deliver this resend only to members who are in-world">
+        <input type="checkbox" data-relist-oo="${key}" ${checked ? 'checked' : ''}> only online
+      </label>
+      <button class="btn btn-ghost btn-mini" data-relist="${key}" ${deleted ? 'disabled' : ''}
+        ${deleted ? 'title="This list no longer exists"' : ''}>Redeliver</button>
+    </div>`;
+  }).join('');
+
   const statusLabel = { queued: 'pending', inflight: 'delivering…', sent: 'delivered',
     skipped: 'skipped (offline)', failed: 'failed' };
   const cls = { queued: 'st-pending', inflight: 'st-pending', sent: 'st-sent',
@@ -891,6 +912,27 @@ $('#log-rows').addEventListener('click', async (e) => {
     toast(err.message, 'err');
     btn.disabled = false;
   }
+});
+
+$('#log-audiences').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-relist]');
+  if (!btn || logPkgId === null) return;
+  const listId = Number(btn.dataset.relist);
+  const onlyOnline = btn.closest('.audience-row')
+    .querySelector('input[data-relist-oo]').checked;
+  const label = listId === 0 ? 'All subscribers'
+    : (state.lists.find(l => l.id === listId) || { name: 'this list' }).name;
+  if (!await confirmModal(`Redeliver “${logPkg.name}” to ${label}`
+    + `${onlyOnline ? ' (only members currently online)' : ''}?`
+    + ` Anyone already queued won't be queued twice.`)) return;
+  try {
+    const body = { only_online: onlyOnline };
+    if (listId !== 0) body.list_ids = [listId];
+    const r = await api(`/packages/${logPkgId}/send`, { method: 'POST', body });
+    toast(`Queued ${r.queued} deliveries to ${label}`, 'ok');
+    renderLog();
+    loadPackages();
+  } catch (err) { toast(err.message, 'err'); }
 });
 
 $('#btn-log-refresh').addEventListener('click', renderLog);

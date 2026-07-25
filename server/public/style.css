@@ -446,6 +446,23 @@ select {
 }
 
 /* ---------- delivery log ---------- */
+.log-audiences { display: grid; gap: .4rem; margin-bottom: .8rem; }
+.audience-row {
+  display: flex; align-items: center; gap: .9rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
+  border-radius: 9px;
+  padding: .45rem .8rem;
+  font-size: .85rem;
+}
+.audience-row label {
+  display: flex; align-items: center; gap: .35rem;
+  color: var(--muted); font-size: .8rem; cursor: pointer;
+  margin-left: auto;
+}
+.audience-row input { accent-color: var(--ok); }
+.audience-row.deleted { opacity: .5; }
 .st-sent { color: var(--ok); }
 .st-pending { color: var(--gold); }
 .st-failed { color: var(--bad); }
