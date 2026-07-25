@@ -287,20 +287,27 @@ const ATTACH_CATS = [
 const catOf = (type) => ['landmark', 'notecard', 'object'].includes(type) ? type : 'other';
 const invItem = (name) => state.kiosk.inventory.find(i => i.name === name);
 
+let attachCat = 'all';
+let attachQ = '';
+
 function renderItemGrid() { // kept name: called from openEditor
   const warn = $('#pkg-kiosk-warn');
   if (!state.kiosk.online) {
     warn.textContent = 'Kiosk is offline — this item list is from its last report and may be stale.';
     warn.classList.remove('hidden');
   } else warn.classList.add('hidden');
+  attachCat = 'all';
+  attachQ = '';
+  $('#attach-search').value = '';
   renderAttached();
-  $('#attach-menu').classList.add('hidden');
+  renderAvail();
 }
 
 function renderAttached() {
   const box = $('#attached-list');
+  $('#attach-count').textContent = state.editItems.size;
   if (!state.editItems.size) {
-    box.innerHTML = '<p class="hint">No attachments yet — message-only package.</p>';
+    box.innerHTML = '<p class="hint">Nothing yet — message-only package.</p>';
     return;
   }
   box.innerHTML = [...state.editItems].map(name => {
@@ -320,61 +327,60 @@ $('#attached-list').addEventListener('click', (e) => {
   if (!btn) return;
   state.editItems.delete(btn.dataset.detach);
   renderAttached();
+  renderAvail();
 });
 
-function availableIn(cat) {
-  return state.kiosk.inventory.filter(i =>
-    catOf(i.type) === cat && !state.editItems.has(i.name));
+function availableItems() {
+  return state.kiosk.inventory.filter(i => !state.editItems.has(i.name));
 }
 
-function renderAttachCats() {
-  const menu = $('#attach-menu');
-  if (!state.kiosk.inventory.length) {
-    menu.innerHTML = '<p class="sendone-empty">Kiosk reports no items yet — drop landmarks, '
-      + 'notecards or objects into the kiosk prim in-world first.</p>';
-    return;
-  }
-  menu.innerHTML = ATTACH_CATS.map(c => {
-    const n = availableIn(c.key).length;
-    return `<button type="button" data-cat="${c.key}" ${n ? '' : 'disabled'}>
-      ${c.icon} ${c.label} <span class="menu-count">${n}</span></button>`;
+function renderAvail() {
+  const avail = availableItems();
+  // Category chips with live counts (search-independent).
+  const cats = [{ key: 'all', label: 'All', icon: '' }].concat(ATTACH_CATS);
+  $('#attach-filter').innerHTML = cats.map(c => {
+    const n = c.key === 'all' ? avail.length
+      : avail.filter(i => catOf(i.type) === c.key).length;
+    return `<button type="button" class="filter-chip ${attachCat === c.key ? 'active' : ''}"
+      data-attach-cat="${c.key}" ${n ? '' : 'disabled'}>${c.icon} ${c.label} ${n}</button>`;
   }).join('');
+
+  const q = attachQ.toLowerCase();
+  const rows = avail
+    .filter(i => attachCat === 'all' || catOf(i.type) === attachCat)
+    .filter(i => !q || i.name.toLowerCase().includes(q))
+    .map(i => {
+      const blocked = !i.ok;
+      return `<button type="button" data-additem="${esc(i.name)}" ${blocked ? 'disabled' : ''}
+        title="${blocked ? 'Not copy+transfer — cannot be sent (it would be given away permanently)' : 'Click to attach'}">
+        <span>${TYPE_ICON[i.type] || '✨'} ${esc(i.name)}</span>
+        ${blocked ? '<span class="mono">no-trans</span>' : ''}
+      </button>`;
+    });
+  $('#attach-avail').innerHTML = rows.join('')
+    || `<p class="sendone-empty">${state.kiosk.inventory.length
+      ? (q ? 'No items match the search.' : 'Everything in this category is already attached.')
+      : 'Kiosk reports no items yet — drop landmarks, notecards or objects into the kiosk prim in-world first.'}</p>`;
 }
 
-function renderAttachItems(cat) {
-  const def = ATTACH_CATS.find(c => c.key === cat);
-  const rows = availableIn(cat).map(i => {
-    const blocked = !i.ok;
-    return `<button type="button" data-additem="${esc(i.name)}" ${blocked ? 'disabled' : ''}
-      title="${blocked ? 'Not copy+transfer — cannot be sent (it would be given away permanently)' : ''}">
-      ${TYPE_ICON[i.type] || '✨'} ${esc(i.name)}</button>`;
-  });
-  $('#attach-menu').innerHTML =
-    `<button type="button" data-back="1">‹ Back — ${def.icon} ${def.label}</button>` +
-    (rows.join('') || '<p class="sendone-empty">Nothing left to add in this category.</p>');
-}
-
-$('#btn-add-attach').addEventListener('click', (e) => {
-  e.stopPropagation();
-  const menu = $('#attach-menu');
-  if (menu.classList.contains('hidden')) {
-    renderAttachCats();
-    menu.classList.remove('hidden');
-  } else menu.classList.add('hidden');
+$('#attach-filter').addEventListener('click', (e) => {
+  const chip = e.target.closest('button[data-attach-cat]');
+  if (!chip) return;
+  attachCat = chip.dataset.attachCat;
+  renderAvail();
 });
 
-$('#attach-menu').addEventListener('click', (e) => {
-  e.stopPropagation();
-  const cat = e.target.closest('button[data-cat]');
-  if (cat) return renderAttachItems(cat.dataset.cat);
-  if (e.target.closest('button[data-back]')) return renderAttachCats();
-  const add = e.target.closest('button[data-additem]');
-  if (add) {
-    const name = add.dataset.additem;
-    state.editItems.add(name);
-    renderAttached();
-    renderAttachItems(catOf(invItem(name).type)); // stay open for multi-add
-  }
+$('#attach-search').addEventListener('input', () => {
+  attachQ = $('#attach-search').value.trim();
+  renderAvail();
+});
+
+$('#attach-avail').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-additem]');
+  if (!btn) return;
+  state.editItems.add(btn.dataset.additem);
+  renderAttached();
+  renderAvail(); // item hops to the left pane; filters stay put
 });
 
 function updateMsgCount() {

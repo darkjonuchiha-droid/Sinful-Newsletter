@@ -275,6 +275,7 @@ textarea { resize: vertical; width: 100%; }
   padding: 1.6rem;
   box-shadow: 0 40px 100px #000000aa;
 }
+.editor { width: min(780px, 96vw); }
 .confirm { width: min(430px, 96vw); }
 .confirm p { margin: 0 0 1.2rem; line-height: 1.5; }
 .editor-title { font-family: "Fraunces", serif; font-style: italic; margin: 0 0 1.2rem; }
@@ -298,15 +299,58 @@ textarea { resize: vertical; width: 100%; }
 }
 .attached-row.missing { border-color: #ff5d5d55; }
 .attached-row.missing em { color: var(--bad); font-style: normal; font-size: .76rem; }
-.attach-menu {
-  position: absolute; left: 0; right: auto; top: calc(100% + 5px);
-  min-width: 240px; max-height: 280px; overflow-y: auto;
+.attach-panes {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .8rem;
+  align-items: start;
 }
-.attach-menu button[disabled] { opacity: .45; cursor: not-allowed; }
-.attach-menu .menu-count { float: right; color: var(--gold); font-weight: 400; }
-.attach-menu button[data-back] {
-  color: var(--muted); border-bottom: 1px solid var(--line);
+.attach-pane {
+  background: var(--bg0);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: .7rem .8rem;
+  min-height: 220px;
 }
+.attach-pane h4 {
+  margin: 0 0 .55rem;
+  font-size: .78rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); font-weight: 700;
+}
+.attach-pane h4 em { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.attach-pane .attached-list { margin-bottom: 0; }
+.attach-pane .attached-row { background: var(--panel); }
+.attach-filter { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .5rem; }
+.filter-chip {
+  font: inherit; font-size: .72rem; font-weight: 700;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: .18rem .6rem;
+  cursor: pointer;
+}
+.filter-chip.active { color: var(--rose); border-color: var(--rose); }
+.filter-chip[disabled] { opacity: .4; cursor: not-allowed; }
+#attach-search { width: 100%; margin-bottom: .5rem; padding: .4rem .6rem; font-size: .84rem; }
+.attach-avail {
+  display: grid; gap: .3rem;
+  max-height: 240px; overflow-y: auto;
+}
+.attach-avail button {
+  font: inherit; font-size: .84rem;
+  display: flex; justify-content: space-between; align-items: center; gap: .6rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: .42rem .6rem;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .12s, background .12s;
+}
+.attach-avail button:hover { border-color: var(--rose); background: var(--rose-soft); }
+.attach-avail button[disabled] { opacity: .45; cursor: not-allowed; }
+.attach-avail button[disabled]:hover { border-color: var(--line); background: var(--panel); }
+@media (max-width: 640px) { .attach-panes { grid-template-columns: 1fr; } }
 .oo-check {
   display: flex; gap: .6rem; align-items: flex-start;
   background: var(--bg0);

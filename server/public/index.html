@@ -217,10 +217,17 @@
     <div class="field">
       <span>Attachments <em>(items currently inside the kiosk prim)</em></span>
       <div id="pkg-kiosk-warn" class="inline-warn hidden"></div>
-      <div id="attached-list" class="attached-list"></div>
-      <div class="dropdown">
-        <button type="button" id="btn-add-attach" class="btn btn-ghost btn-mini">+ Add attachment ▾</button>
-        <div id="attach-menu" class="drop-menu attach-menu hidden"></div>
+      <div class="attach-panes">
+        <div class="attach-pane">
+          <h4>In this package <span id="attach-count" class="count-chip"></span></h4>
+          <div id="attached-list" class="attached-list"></div>
+        </div>
+        <div class="attach-pane">
+          <h4>Kiosk items <em>— click to add</em></h4>
+          <div id="attach-filter" class="attach-filter"></div>
+          <input id="attach-search" type="search" placeholder="Search items…" autocomplete="off">
+          <div id="attach-avail" class="attach-avail"></div>
+        </div>
       </div>
     </div>
     <div class="editor-actions">
