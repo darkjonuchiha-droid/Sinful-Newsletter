@@ -196,6 +196,12 @@ router.post('/subscribers/bulk', wrap(async (req, res) => {
       [action === 'activate' ? 1 : 0, ...uuids]);
     return res.json({ ok: true, affected: r.changes });
   }
+  if (action === 'shadowban' || action === 'unshadowban') {
+    const r = await db.run(
+      `UPDATE subscribers SET shadowbanned = ? WHERE uuid IN (${ph})`,
+      [action === 'shadowban' ? 1 : 0, ...uuids]);
+    return res.json({ ok: true, affected: r.changes });
+  }
   if (action === 'delete') {
     const r = await db.run(`DELETE FROM subscribers WHERE uuid IN (${ph})`, uuids);
     return res.json({ ok: true, affected: r.changes });
@@ -223,9 +229,14 @@ router.post('/subscribers/bulk', wrap(async (req, res) => {
 }));
 
 router.patch('/subscribers/:uuid', wrap(async (req, res) => {
-  const active = req.body && req.body.active ? 1 : 0;
-  const r = await db.run('UPDATE subscribers SET active = ? WHERE uuid = ?',
-    [active, String(req.params.uuid).toLowerCase()]);
+  const body = req.body || {};
+  const sets = [];
+  const params = [];
+  if ('active' in body) { sets.push('active = ?'); params.push(body.active ? 1 : 0); }
+  if ('shadowbanned' in body) { sets.push('shadowbanned = ?'); params.push(body.shadowbanned ? 1 : 0); }
+  if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
+  params.push(String(req.params.uuid).toLowerCase());
+  const r = await db.run(`UPDATE subscribers SET ${sets.join(', ')} WHERE uuid = ?`, params);
   if (!r.changes) return res.status(404).json({ error: 'no such subscriber' });
   res.json({ ok: true });
 }));
@@ -309,12 +320,12 @@ router.post('/packages/:id/send', wrap(async (req, res) => {
       INSERT INTO deliveries (package_id, uuid, status, queued_at)
       SELECT ?, s.uuid, 'queued', ? FROM subscribers s
       JOIN list_members m ON m.uuid = s.uuid AND m.list_id = ?
-      WHERE s.active = 1
+      WHERE s.active = 1 AND s.shadowbanned = 0
     `, [id, db.now(), listId]);
   } else {
     r = await db.run(`
       INSERT INTO deliveries (package_id, uuid, status, queued_at)
-      SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1
+      SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1 AND shadowbanned = 0
     `, [id, db.now()]);
   }
   await pingKiosk();

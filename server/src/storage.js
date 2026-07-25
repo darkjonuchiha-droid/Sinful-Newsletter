@@ -18,11 +18,12 @@ function schemaSql(kind) {
   const id = kind === 'pg' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
   return [
     `CREATE TABLE IF NOT EXISTS subscribers (
-      uuid       TEXT PRIMARY KEY,
-      name       TEXT NOT NULL,
-      active     INTEGER NOT NULL DEFAULT 1,
-      source     TEXT NOT NULL DEFAULT 'admin',
-      created_at TEXT NOT NULL)`,
+      uuid         TEXT PRIMARY KEY,
+      name         TEXT NOT NULL,
+      active       INTEGER NOT NULL DEFAULT 1,
+      shadowbanned INTEGER NOT NULL DEFAULT 0,
+      source       TEXT NOT NULL DEFAULT 'admin',
+      created_at   TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS packages (
       id         ${id},
       name       TEXT NOT NULL,
@@ -85,8 +86,9 @@ async function initSqlite() {
   db.exec('PRAGMA wal_autocheckpoint = 1000');
   db.exec('PRAGMA foreign_keys = ON');
   for (const s of schemaSql('sqlite')) db.exec(s);
-  // migration: schedules.list_id (added after 2.0; sqlite lacks IF NOT EXISTS)
+  // migrations (added after 2.0; sqlite lacks ADD COLUMN IF NOT EXISTS)
   try { db.exec('ALTER TABLE schedules ADD COLUMN list_id INTEGER'); } catch (e) { /* exists */ }
+  try { db.exec('ALTER TABLE subscribers ADD COLUMN shadowbanned INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* exists */ }
   return {
     kind: 'sqlite',
     async all(sql, p = []) { return db.prepare(sql).all(...p); },
@@ -103,6 +105,7 @@ async function initPg() {
   const pool = new Pool({ connectionString: config.databaseUrl, max: 3 });
   for (const s of schemaSql('pg')) await pool.query(s);
   await pool.query('ALTER TABLE schedules ADD COLUMN IF NOT EXISTS list_id INTEGER');
+  await pool.query('ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS shadowbanned INTEGER NOT NULL DEFAULT 0');
   const conv = (sql) => { let i = 0; return sql.replace(/\?/g, () => '$' + (++i)); };
   return {
     kind: 'pg',

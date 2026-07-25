@@ -312,7 +312,7 @@ function renderSubscribers() {
   $('#sub-rows').innerHTML = state.subscribers.map(s => `
     <tr class="${s.active ? '' : 'inactive-row'}" data-uuid="${s.uuid}">
       <td><input type="checkbox" class="row-sel" ${state.selected.has(s.uuid) ? 'checked' : ''}></td>
-      <td>${esc(s.name)}</td>
+      <td>${s.shadowbanned ? '<span title="Shadow-banned: looks subscribed to them, receives nothing">👻</span> ' : ''}${esc(s.name)}</td>
       <td class="mono" title="${s.uuid}">${s.uuid}</td>
       <td>
         ${(s.lists || []).map(l => `<span class="sub-list-tag">${esc(l.name)}</span>`).join('')}
@@ -324,7 +324,14 @@ function renderSubscribers() {
           <input type="checkbox" data-act="toggle" ${s.active ? 'checked' : ''}><i></i>
         </label>
       </td>
-      <td><button class="btn btn-ghost btn-mini" data-act="remove">Remove</button></td>
+      <td>
+        <button class="btn btn-ghost btn-mini" data-act="shadow"
+          title="${s.shadowbanned
+            ? 'Shadow-banned — receives nothing. Click to lift.'
+            : 'Shadow ban: they stay visibly subscribed but receive nothing'}">
+          ${s.shadowbanned ? 'Lift 👻' : '👻'}</button>
+        <button class="btn btn-ghost btn-mini" data-act="remove">Remove</button>
+      </td>
     </tr>`).join('');
   renderBulkBar();
 }
@@ -345,6 +352,17 @@ $('#sub-rows').addEventListener('click', async (e) => {
 
   if (e.target.closest('button[data-act=lists]')) {
     return openMemberModal(sub);
+  }
+  if (e.target.closest('button[data-act=shadow]')) {
+    if (!sub) return;
+    try {
+      await api(`/subscribers/${uuid}`, {
+        method: 'PATCH', body: { shadowbanned: !sub.shadowbanned },
+      });
+      toast(sub.shadowbanned ? 'Shadow ban lifted' : 'Shadow-banned — they will notice nothing', 'ok');
+      loadSubscribers();
+    } catch (err) { toast(err.message, 'err'); }
+    return;
   }
   if (e.target.closest('button[data-act=remove]')) {
     if (!await confirmModal(`Remove ${sub ? sub.name : uuid} permanently? (Use the Active toggle to pause instead.)`)) return;
@@ -414,6 +432,8 @@ $('#bulk-bar').addEventListener('click', async (e) => {
   }
   if (act === 'activate') return runBulk('activate', 0, 'Activated');
   if (act === 'deactivate') return runBulk('deactivate', 0, 'Deactivated');
+  if (act === 'shadowban') return runBulk('shadowban', 0, 'Shadow-banned');
+  if (act === 'unshadowban') return runBulk('unshadowban', 0, 'Shadow ban lifted for');
   if (act === 'delete') {
     if (!await confirmModal(`Permanently remove ${n} subscriber(s)? (Deactivate instead if you just want to pause them.)`)) return;
     return runBulk('delete', 0, 'Removed');

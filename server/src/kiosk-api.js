@@ -66,12 +66,12 @@ async function fireDueSchedules() {
         INSERT INTO deliveries (package_id, uuid, status, queued_at)
         SELECT ?, sub.uuid, 'queued', ? FROM subscribers sub
         JOIN list_members m ON m.uuid = sub.uuid AND m.list_id = ?
-        WHERE sub.active = 1
+        WHERE sub.active = 1 AND sub.shadowbanned = 0
       `, [s.package_id, db.now(), s.list_id]);
     } else {
       r = await db.run(`
         INSERT INTO deliveries (package_id, uuid, status, queued_at)
-        SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1
+        SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1 AND shadowbanned = 0
       `, [s.package_id, db.now()]);
     }
     await db.run("UPDATE schedules SET status = 'sent', fired_at = ? WHERE id = ?",
@@ -210,6 +210,13 @@ router.get('/latest', wrap(async (req, res) => {
   const pkg = await latestPackage();
   if (!pkg) return res.json({ latest: null });
   if (UUID_RE.test(uuid)) {
+    // Shadow-banned avatars get a plausible "nothing published yet" —
+    // indistinguishable from an empty newsletter on their side.
+    const sub = await db.get('SELECT shadowbanned FROM subscribers WHERE uuid = ?', [uuid]);
+    if (sub && sub.shadowbanned) {
+      await touchKiosk();
+      return res.json({ latest: null });
+    }
     await db.run(`
       INSERT INTO deliveries (package_id, uuid, status, queued_at, sent_at)
       VALUES (?, ?, 'sent', ?, ?)
