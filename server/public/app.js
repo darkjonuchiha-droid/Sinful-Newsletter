@@ -152,6 +152,7 @@ function renderPackages() {
             <button class="btn btn-primary btn-mini" data-act="send">Send to all</button>
             <button class="btn btn-ghost btn-mini" data-act="schedule">Schedule…</button>
             <button class="btn btn-ghost btn-mini" data-act="test">Send to one…</button>
+            <button class="btn btn-ghost btn-mini" data-act="log">Log</button>
             <button class="btn btn-ghost btn-mini" data-act="edit">Edit</button>
             <button class="btn btn-ghost btn-mini" data-act="delete">Delete</button>
           </div>
@@ -170,6 +171,7 @@ $('#package-list').addEventListener('click', async (e) => {
 
   if (act === 'edit') return openEditor(pkg);
   if (act === 'schedule') return openSchedule(pkg);
+  if (act === 'log') return openLog(pkg);
 
   if (act === 'delete') {
     if (!await confirmModal(`Delete package “${pkg.name}”? Its delivery history is removed too.`)) return;
@@ -402,6 +404,42 @@ async function cancelSchedule(sid) {
     loadSchedules();
   } catch (err) { toast(err.message, 'err'); }
 }
+
+// -- delivery log modal --
+
+let logPkgId = null;
+
+async function openLog(pkg) {
+  logPkgId = pkg.id;
+  $('#log-title').textContent = `Deliveries — ${pkg.name}`;
+  $('#log-overlay').classList.remove('hidden');
+  await renderLog();
+}
+
+async function renderLog() {
+  if (logPkgId === null) return;
+  const data = await api(`/deliveries?package_id=${logPkgId}`);
+  const s = data.stats || {};
+  $('#log-stats').textContent =
+    `${s.sent || 0} delivered · ${s.pending || 0} pending · ${s.failed || 0} failed` +
+    ` — pending means the kiosk hasn't picked it up yet (touch the kiosk → Sync to hurry it).`;
+  const statusLabel = { queued: 'pending', inflight: 'delivering…', sent: 'delivered', failed: 'failed' };
+  const cls = { queued: 'st-pending', inflight: 'st-pending', sent: 'st-sent', failed: 'st-failed' };
+  $('#log-rows').innerHTML = data.deliveries.map(d => `
+    <tr>
+      <td>${esc(d.name || d.uuid)}</td>
+      <td><span class="${cls[d.status] || ''}">${esc(statusLabel[d.status] || d.status)}</span></td>
+      <td class="mono">${esc(fmtLocal(d.queued_at))}</td>
+      <td class="mono">${d.sent_at ? esc(fmtLocal(d.sent_at)) : '—'}</td>
+    </tr>`).join('') ||
+    '<tr><td colspan="4">No deliveries yet for this package.</td></tr>';
+}
+
+$('#btn-log-refresh').addEventListener('click', renderLog);
+$('#btn-log-close').addEventListener('click', () => {
+  logPkgId = null;
+  $('#log-overlay').classList.add('hidden');
+});
 
 // -- schedule modal --
 

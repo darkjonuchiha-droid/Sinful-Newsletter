@@ -336,6 +336,11 @@ textarea { resize: vertical; width: 100%; }
 #schedule-dt { width: 100%; color-scheme: dark; margin-bottom: .35rem; }
 @media (max-width: 640px) { .cal-cell { min-height: 64px; } }
 
+/* ---------- delivery log ---------- */
+.st-sent { color: var(--ok); }
+.st-pending { color: var(--gold); }
+.st-failed { color: var(--bad); }
+
 /* ---------- toasts ---------- */
 .toasts {
   position: fixed; right: 1rem; bottom: 1rem; z-index: 60;
