@@ -45,8 +45,30 @@ async function api(path, opts = {}) {
     throw new Error('session expired');
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText);
+  if (!res.ok) {
+    const err = new Error(data.error || res.statusText);
+    err.data = data;
+    throw err;
+  }
   return data;
+}
+
+// Send a package to one recipient; if they're shadow-banned, ask before
+// overriding. Returns true when a delivery was queued.
+async function trySendTo(pkgId, input) {
+  try {
+    await api(`/packages/${pkgId}/sendto`, { method: 'POST', body: { input } });
+    return true;
+  } catch (err) {
+    if (err.data && err.data.shadowbanned) {
+      const ok = await confirmModal(
+        `👻 ${err.data.name} is shadow-banned and excluded from all sends. Deliver to them anyway?`);
+      if (!ok) return false;
+      await api(`/packages/${pkgId}/sendto`, { method: 'POST', body: { input, force: true } });
+      return true;
+    }
+    throw err;
+  }
 }
 
 function toast(msg, kind = '') {
@@ -201,9 +223,10 @@ $('#package-list').addEventListener('click', async (e) => {
     const input = prompt('Send to (UUID, or the exact name of an existing subscriber):');
     if (!input) return;
     try {
-      await api(`/packages/${id}/sendto`, { method: 'POST', body: { input } });
-      toast('Delivery queued', 'ok');
-      loadPackages();
+      if (await trySendTo(id, input)) {
+        toast('Delivery queued', 'ok');
+        loadPackages();
+      }
     } catch (err) { toast(err.message, 'err'); }
   }
 });
@@ -701,11 +724,12 @@ $('#log-rows').addEventListener('click', async (e) => {
   if (!btn || logPkgId === null) return;
   btn.disabled = true;
   try {
-    await api(`/packages/${logPkgId}/sendto`, {
-      method: 'POST', body: { input: btn.dataset.redeliver },
-    });
-    toast('Redelivery queued', 'ok');
-    renderLog();
+    if (await trySendTo(logPkgId, btn.dataset.redeliver)) {
+      toast('Redelivery queued', 'ok');
+      renderLog();
+    } else {
+      btn.disabled = false; // declined the shadow-ban override
+    }
   } catch (err) {
     toast(err.message, 'err');
     btn.disabled = false;

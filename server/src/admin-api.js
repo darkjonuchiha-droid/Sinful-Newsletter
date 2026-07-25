@@ -348,6 +348,13 @@ router.post('/packages/:id/sendto', wrap(async (req, res) => {
   if (!uuid) {
     return res.status(400).json({ error: 'enter a UUID, or the exact name of an existing subscriber' });
   }
+  // Shadow-banned recipients require an explicit force flag (the UI asks).
+  const sub = await db.get('SELECT name, shadowbanned FROM subscribers WHERE uuid = ?', [uuid]);
+  if (sub && sub.shadowbanned && !(req.body && req.body.force)) {
+    return res.status(409).json({
+      error: `${sub.name} is shadow-banned`, shadowbanned: true, name: sub.name,
+    });
+  }
   await db.run('INSERT INTO deliveries (package_id, uuid, status, queued_at) VALUES (?, ?, ?, ?)',
     [id, uuid, 'queued', db.now()]);
   await pingKiosk();
