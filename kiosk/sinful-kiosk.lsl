@@ -26,7 +26,9 @@ string  g_url;          // our HTTP-in URL (empty until granted)
 list    g_http;         // strided [request_id, type, aux]
 list    g_queries;      // strided [dataserver_id, type, lookup_id]
 list    g_dq;           // delivery queue, strided [id, uuid, pkg_json]
-list    g_results;      // delivered ids awaiting report
+list    g_results;      // report queue, strided [id, status]
+string  g_await;        // JSON of the delivery whose online-check is pending
+integer g_awaitTicks;
 integer g_lastHello;    // unixtime of last successful hello
 integer g_dlgChan;
 
@@ -146,6 +148,27 @@ deliverPkg(key dest, string pkgJson)
     if (give != []) llGiveInventoryList(dest, name, give); // sleeps 3 s
 }
 
+// Offline recipients: llGiveInventoryList fails ("cannot find destination"),
+// but single-item llGiveInventory offers queue up for their next login —
+// same delivery guarantee as group notice attachments. No folder, but it
+// arrives.
+deliverOffline(key dest, string pkgJson)
+{
+    string name = llJsonGetValue(pkgJson, ["name"]);
+    string msg = llJsonGetValue(pkgJson, ["msg"]);
+    if (msg == JSON_INVALID) msg = "";
+    string text = NEWSLETTER_NAME + " — " + name;
+    if (msg != "") text += "\n" + msg;
+    llInstantMessage(dest, text);
+    integer i = 0;
+    while (llJsonValueType(pkgJson, ["items", i]) != JSON_INVALID)
+    {
+        string nm = llJsonGetValue(pkgJson, ["items", i]);
+        if (llGetInventoryType(nm) != INVENTORY_NONE) llGiveInventory(dest, nm);
+        i++;
+    }
+}
+
 // ---- server conversation -----------------------------------
 
 hello()
@@ -165,13 +188,25 @@ reportDeliveries()
     list objs = [];
     integer i;
     integer n = llGetListLength(g_results);
-    for (i = 0; i < n; ++i)
+    for (i = 0; i < n; i += 2)
         objs += llList2Json(JSON_OBJECT,
-            ["id", llList2Integer(g_results, i), "status", "sent"]);
+            ["id", llList2Integer(g_results, i),
+             "status", llList2String(g_results, i + 1)]);
     g_results = [];
     req("POST", "/report",
         llList2Json(JSON_OBJECT, ["deliveries", llList2Json(JSON_ARRAY, objs)]),
         "report", "");
+}
+
+// After each delivery completes: report + refetch when drained, else the
+// 0.5 s timer keeps draining.
+finishOrContinue()
+{
+    if (llGetListLength(g_dq) == 0)
+    {
+        llSetTimerEvent(HEARTBEAT);
+        reportDeliveries();
+    }
 }
 
 reportLookup(integer lid, string field, string value)
@@ -320,9 +355,22 @@ default
         integer idx = llListFindList(g_queries, [qid]);
         if (idx == -1) return;
         string type = llList2String(g_queries, idx + 1);
-        integer lid = (integer)llList2String(g_queries, idx + 2);
+        string aux = llList2String(g_queries, idx + 2);
         g_queries = llDeleteSubList(g_queries, idx, idx + 2);
 
+        if (type == "dlv") // online-status answer for a pending delivery
+        {
+            key dest = (key)llJsonGetValue(aux, ["uuid"]);
+            string pkg = llJsonGetValue(aux, ["pkg"]);
+            if (data == "1") deliverPkg(dest, pkg);
+            else deliverOffline(dest, pkg);
+            g_results += [(integer)llJsonGetValue(aux, ["id"]), "sent"];
+            g_await = "";
+            finishOrContinue();
+            return;
+        }
+
+        integer lid = (integer)aux;
         if (type == "n2k")
         {
             if ((key)data) reportLookup(lid, "uuid", data);
@@ -396,6 +444,20 @@ default
 
     timer()
     {
+        // Waiting on an online-status check for the current delivery?
+        if (g_await != "")
+        {
+            g_awaitTicks++;
+            if (g_awaitTicks > 40) // ~20 s, dataserver never answered
+            {
+                g_results += [(integer)llJsonGetValue(g_await, ["id"]), "failed"];
+                integer x = llListFindList(g_queries, ["dlv"]);
+                if (x > 0) g_queries = llDeleteSubList(g_queries, x - 1, x + 1);
+                g_await = "";
+                finishOrContinue();
+            }
+            return;
+        }
         if (llGetListLength(g_dq) == 0)
         {
             // idle heartbeat
@@ -403,17 +465,16 @@ default
             else hello();
             return;
         }
-        // drain one delivery per tick (~5 s each due to LSL sleeps)
+        // Next delivery: check the recipient's online status first —
+        // folder gives only work for online avatars; offline avatars get
+        // the per-item fallback in deliverOffline().
         integer did = llList2Integer(g_dq, 0);
-        key dest = (key)llList2String(g_dq, 1);
+        string uuid = llList2String(g_dq, 1);
         string pkg = llList2String(g_dq, 2);
         g_dq = llDeleteSubList(g_dq, 0, 2);
-        deliverPkg(dest, pkg);
-        g_results += [did];
-        if (llGetListLength(g_dq) == 0)
-        {
-            llSetTimerEvent(HEARTBEAT);
-            reportDeliveries(); // its response triggers the next fetch
-        }
+        g_await = llList2Json(JSON_OBJECT, ["id", did, "uuid", uuid, "pkg", pkg]);
+        g_awaitTicks = 0;
+        key q = llRequestAgentData((key)uuid, DATA_ONLINE);
+        g_queries += [q, "dlv", g_await];
     }
 }
