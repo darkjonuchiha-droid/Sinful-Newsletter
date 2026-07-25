@@ -87,8 +87,11 @@ async function pollTick() {
 // ---------------- overview / kiosk pill ----------------
 
 async function loadOverview() {
+  const prevPending = state.overview ? state.overview.pendingLookups.length : 0;
   state.overview = await api('/overview');
   const { kioskOnline, kioskLastSeen, pendingLookups, subscribers } = state.overview;
+  // A name lookup just resolved in-world — show the new subscriber(s) now.
+  if (prevPending > 0 && pendingLookups.length < prevPending) loadSubscribers();
   const pill = $('#kiosk-pill');
   pill.classList.toggle('pill-on', kioskOnline);
   pill.classList.toggle('pill-off', !kioskOnline);
