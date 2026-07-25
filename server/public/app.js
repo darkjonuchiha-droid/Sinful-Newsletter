@@ -249,16 +249,7 @@ $('#package-list').addEventListener('click', async (e) => {
     return loadPackages();
   }
 
-  if (act === 'test') {
-    const input = prompt('Send to (UUID, or the exact name of an existing subscriber):');
-    if (!input) return;
-    try {
-      if (await trySendTo(id, input)) {
-        toast('Delivery queued', 'ok');
-        loadPackages();
-      }
-    } catch (err) { toast(err.message, 'err'); }
-  }
+  if (act === 'test') return openSendOne(pkg);
 });
 
 // ---------------- package editor ----------------
@@ -636,6 +627,67 @@ $('#btn-member-close').addEventListener('click', () => {
   $('#member-overlay').classList.add('hidden');
   loadLists();
   loadSubscribers();
+});
+
+// -- send to one modal (subscriber search picker) --
+
+const CLIENT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+let sendOnePkg = null;
+let sendOneDebounce;
+
+function openSendOne(pkg) {
+  sendOnePkg = pkg;
+  $('#sendone-title').textContent = `Send “${pkg.name}” to one person:`;
+  $('#sendone-search').value = '';
+  $('#sendone-overlay').classList.remove('hidden');
+  renderSendOneResults('');
+  $('#sendone-search').focus();
+}
+
+let sendOneSeq = 0;
+async function renderSendOneResults(q) {
+  const seq = ++sendOneSeq;
+  const data = await api('/subscribers' + (q ? `?q=${encodeURIComponent(q)}` : ''));
+  if (seq !== sendOneSeq) return; // a newer search superseded this response
+  const box = $('#sendone-results');
+  const rows = data.subscribers.slice(0, 8).map(s => `
+    <button data-sendone-uuid="${s.uuid}">
+      <span>${s.shadowbanned ? '👻 ' : ''}${esc(s.name)}${s.active ? '' : ' <em>(inactive)</em>'}</span>
+      <span class="mono">${s.uuid.slice(0, 8)}…</span>
+    </button>`);
+  // Raw UUID pasted and not among the matches -> offer a direct send.
+  if (CLIENT_UUID_RE.test(q.trim())
+      && !data.subscribers.some(s => s.uuid === q.trim().toLowerCase())) {
+    rows.push(`<button data-sendone-uuid="${esc(q.trim().toLowerCase())}">
+      <span>Send to this UUID <em>(not a subscriber)</em></span>
+      <span class="mono">${esc(q.trim().slice(0, 8))}…</span>
+    </button>`);
+  }
+  box.innerHTML = rows.join('')
+    || `<p class="sendone-empty">No subscriber matches “${esc(q)}” — you can paste a full UUID to send to anyone.</p>`;
+}
+
+$('#sendone-search').addEventListener('input', () => {
+  clearTimeout(sendOneDebounce);
+  sendOneDebounce = setTimeout(() => renderSendOneResults($('#sendone-search').value.trim()), 250);
+});
+
+$('#sendone-results').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-sendone-uuid]');
+  if (!btn || !sendOnePkg) return;
+  $('#sendone-overlay').classList.add('hidden');
+  try {
+    if (await trySendTo(sendOnePkg.id, btn.dataset.sendoneUuid)) {
+      toast('Delivery queued', 'ok');
+      loadPackages();
+    }
+  } catch (err) { toast(err.message, 'err'); }
+  sendOnePkg = null;
+});
+
+$('#btn-sendone-cancel').addEventListener('click', () => {
+  sendOnePkg = null;
+  $('#sendone-overlay').classList.add('hidden');
 });
 
 // -- send to list modal --

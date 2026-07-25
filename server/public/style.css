@@ -404,6 +404,26 @@ textarea { resize: vertical; width: 100%; }
 }
 .bulk-bar span { font-weight: 700; color: var(--rose); margin-right: .4rem; }
 .sub-table input[type="checkbox"] { accent-color: var(--rose); cursor: pointer; }
+.sendone-results {
+  display: grid; gap: .35rem;
+  max-height: 280px; overflow-y: auto;
+  margin: .5rem 0 .2rem;
+}
+.sendone-results button {
+  font: inherit; font-size: .86rem;
+  display: flex; justify-content: space-between; align-items: baseline; gap: .8rem;
+  background: var(--bg0);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: .5rem .75rem;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .12s, background .12s;
+}
+.sendone-results button:hover { border-color: var(--rose); background: var(--rose-soft); }
+.sendone-results .mono { font-size: .68rem; }
+.sendone-empty { color: var(--muted); font-size: .84rem; padding: .4rem .2rem; }
 .member-checks { display: grid; gap: .4rem; margin-bottom: .4rem; }
 .member-checks label {
   display: flex; align-items: center; gap: .55rem;
