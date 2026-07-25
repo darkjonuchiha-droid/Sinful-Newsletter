@@ -267,43 +267,109 @@ function openEditor(pkg) {
   $('#pkg-name').focus();
 }
 
-function renderItemGrid() {
-  const grid = $('#pkg-items');
-  const inv = state.kiosk.inventory;
+// -- attachment picker: attached list + "Add attachment" category menu --
+
+const TYPE_ICON = {
+  landmark: '🗺️', notecard: '📄', object: '📦', texture: '🖼️',
+  clothing: '👗', animation: '💃', gesture: '👋', sound: '🔊', item: '✨',
+};
+const ATTACH_CATS = [
+  { key: 'landmark', label: 'Landmarks', icon: '🗺️' },
+  { key: 'notecard', label: 'Notecards', icon: '📄' },
+  { key: 'object', label: 'Objects', icon: '📦' },
+  { key: 'other', label: 'Other', icon: '✨' },
+];
+const catOf = (type) => ['landmark', 'notecard', 'object'].includes(type) ? type : 'other';
+const invItem = (name) => state.kiosk.inventory.find(i => i.name === name);
+
+function renderItemGrid() { // kept name: called from openEditor
   const warn = $('#pkg-kiosk-warn');
   if (!state.kiosk.online) {
     warn.textContent = 'Kiosk is offline — this item list is from its last report and may be stale.';
     warn.classList.remove('hidden');
   } else warn.classList.add('hidden');
+  renderAttached();
+  $('#attach-menu').classList.add('hidden');
+}
 
-  if (!inv.length) {
-    grid.innerHTML = '<p class="hint">No items reported yet. Drop notecards, landmarks or objects ' +
-      'into the kiosk prim in-world — they appear here automatically.</p>';
+function renderAttached() {
+  const box = $('#attached-list');
+  if (!state.editItems.size) {
+    box.innerHTML = '<p class="hint">No attachments yet — message-only package.</p>';
     return;
   }
-  // Items selected earlier but no longer in inventory are shown so they can be unticked.
-  const gone = [...state.editItems].filter(n => !inv.some(i => i.name === n));
-  grid.innerHTML = inv.map(i => itemCheckHtml(i.name, i.type, i.ok, state.editItems.has(i.name), false))
-    .concat(gone.map(n => itemCheckHtml(n, 'missing', 0, true, true)))
-    .join('');
+  box.innerHTML = [...state.editItems].map(name => {
+    const it = invItem(name);
+    const missing = !it;
+    const icon = missing ? '⚠️' : (TYPE_ICON[it.type] || '✨');
+    return `<div class="attached-row ${missing ? 'missing' : ''}"
+        title="${missing ? 'No longer in the kiosk — remove it or put the item back' : esc(it.type)}">
+      <span>${icon} ${esc(name)}${missing ? ' <em>(not in kiosk!)</em>' : ''}</span>
+      <button type="button" class="btn btn-ghost btn-mini" data-detach="${esc(name)}">✕</button>
+    </div>`;
+  }).join('');
 }
 
-function itemCheckHtml(name, type, ok, checked, missing) {
-  const disabled = !ok && !checked;
-  const title = missing ? 'No longer in the kiosk — untick or put it back'
-    : (!ok ? 'Not copy+transfer — cannot be sent (it would be given away permanently)' : '');
-  return `<label class="item-check ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}" title="${esc(title)}">
-    <input type="checkbox" data-name="${esc(name)}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
-    <span>${esc(name)}</span><span class="item-type">${esc(type)}</span>
-  </label>`;
+$('#attached-list').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-detach]');
+  if (!btn) return;
+  state.editItems.delete(btn.dataset.detach);
+  renderAttached();
+});
+
+function availableIn(cat) {
+  return state.kiosk.inventory.filter(i =>
+    catOf(i.type) === cat && !state.editItems.has(i.name));
 }
 
-$('#pkg-items').addEventListener('change', (e) => {
-  const cb = e.target.closest('input[type=checkbox]');
-  if (!cb) return;
-  if (cb.checked) state.editItems.add(cb.dataset.name);
-  else state.editItems.delete(cb.dataset.name);
-  cb.closest('.item-check').classList.toggle('checked', cb.checked);
+function renderAttachCats() {
+  const menu = $('#attach-menu');
+  if (!state.kiosk.inventory.length) {
+    menu.innerHTML = '<p class="sendone-empty">Kiosk reports no items yet — drop landmarks, '
+      + 'notecards or objects into the kiosk prim in-world first.</p>';
+    return;
+  }
+  menu.innerHTML = ATTACH_CATS.map(c => {
+    const n = availableIn(c.key).length;
+    return `<button type="button" data-cat="${c.key}" ${n ? '' : 'disabled'}>
+      ${c.icon} ${c.label} <span class="menu-count">${n}</span></button>`;
+  }).join('');
+}
+
+function renderAttachItems(cat) {
+  const def = ATTACH_CATS.find(c => c.key === cat);
+  const rows = availableIn(cat).map(i => {
+    const blocked = !i.ok;
+    return `<button type="button" data-additem="${esc(i.name)}" ${blocked ? 'disabled' : ''}
+      title="${blocked ? 'Not copy+transfer — cannot be sent (it would be given away permanently)' : ''}">
+      ${TYPE_ICON[i.type] || '✨'} ${esc(i.name)}</button>`;
+  });
+  $('#attach-menu').innerHTML =
+    `<button type="button" data-back="1">‹ Back — ${def.icon} ${def.label}</button>` +
+    (rows.join('') || '<p class="sendone-empty">Nothing left to add in this category.</p>');
+}
+
+$('#btn-add-attach').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const menu = $('#attach-menu');
+  if (menu.classList.contains('hidden')) {
+    renderAttachCats();
+    menu.classList.remove('hidden');
+  } else menu.classList.add('hidden');
+});
+
+$('#attach-menu').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const cat = e.target.closest('button[data-cat]');
+  if (cat) return renderAttachItems(cat.dataset.cat);
+  if (e.target.closest('button[data-back]')) return renderAttachCats();
+  const add = e.target.closest('button[data-additem]');
+  if (add) {
+    const name = add.dataset.additem;
+    state.editItems.add(name);
+    renderAttached();
+    renderAttachItems(catOf(invItem(name).type)); // stay open for multi-add
+  }
 });
 
 function updateMsgCount() {
