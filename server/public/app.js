@@ -431,9 +431,26 @@ async function renderLog() {
       <td><span class="${cls[d.status] || ''}">${esc(statusLabel[d.status] || d.status)}</span></td>
       <td class="mono">${esc(fmtLocal(d.queued_at))}</td>
       <td class="mono">${d.sent_at ? esc(fmtLocal(d.sent_at)) : '—'}</td>
+      <td><button class="btn btn-ghost btn-mini" data-redeliver="${d.uuid}">Redeliver</button></td>
     </tr>`).join('') ||
-    '<tr><td colspan="4">No deliveries yet for this package.</td></tr>';
+    '<tr><td colspan="5">No deliveries yet for this package.</td></tr>';
 }
+
+$('#log-rows').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-redeliver]');
+  if (!btn || logPkgId === null) return;
+  btn.disabled = true;
+  try {
+    await api(`/packages/${logPkgId}/sendto`, {
+      method: 'POST', body: { input: btn.dataset.redeliver },
+    });
+    toast('Redelivery queued', 'ok');
+    renderLog();
+  } catch (err) {
+    toast(err.message, 'err');
+    btn.disabled = false;
+  }
+});
 
 $('#btn-log-refresh').addEventListener('click', renderLog);
 $('#btn-log-close').addEventListener('click', () => {
