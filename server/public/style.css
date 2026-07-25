@@ -330,6 +330,7 @@ textarea { resize: vertical; width: 100%; }
 }
 .filter-chip.active { color: var(--rose); border-color: var(--rose); }
 .filter-chip[disabled] { opacity: .4; cursor: not-allowed; }
+.cat-label { font-size: .78rem; font-weight: 700; color: var(--gold); align-self: center; }
 #attach-search { width: 100%; margin-bottom: .5rem; padding: .4rem .6rem; font-size: .84rem; }
 .attach-avail {
   display: grid; gap: .3rem;

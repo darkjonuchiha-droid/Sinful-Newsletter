@@ -287,7 +287,7 @@ const ATTACH_CATS = [
 const catOf = (type) => ['landmark', 'notecard', 'object'].includes(type) ? type : 'other';
 const invItem = (name) => state.kiosk.inventory.find(i => i.name === name);
 
-let attachCat = 'all';
+let attachCat = null; // null = category-selection view
 let attachQ = '';
 
 function renderItemGrid() { // kept name: called from openEditor
@@ -296,7 +296,7 @@ function renderItemGrid() { // kept name: called from openEditor
     warn.textContent = 'Kiosk is offline — this item list is from its last report and may be stale.';
     warn.classList.remove('hidden');
   } else warn.classList.add('hidden');
-  attachCat = 'all';
+  attachCat = null;
   attachQ = '';
   $('#attach-search').value = '';
   renderAttached();
@@ -336,18 +336,34 @@ function availableItems() {
 
 function renderAvail() {
   const avail = availableItems();
-  // Category chips with live counts (search-independent).
-  const cats = [{ key: 'all', label: 'All', icon: '' }].concat(ATTACH_CATS);
-  $('#attach-filter').innerHTML = cats.map(c => {
-    const n = c.key === 'all' ? avail.length
-      : avail.filter(i => catOf(i.type) === c.key).length;
-    return `<button type="button" class="filter-chip ${attachCat === c.key ? 'active' : ''}"
-      data-attach-cat="${c.key}" ${n ? '' : 'disabled'}>${c.icon} ${c.label} ${n}</button>`;
-  }).join('');
+  const search = $('#attach-search');
 
+  // Step 1: pick a category.
+  if (attachCat === null) {
+    search.classList.add('hidden');
+    $('#attach-filter').innerHTML = '';
+    if (!state.kiosk.inventory.length) {
+      $('#attach-avail').innerHTML = '<p class="sendone-empty">Kiosk reports no items yet — '
+        + 'drop landmarks, notecards or objects into the kiosk prim in-world first.</p>';
+      return;
+    }
+    $('#attach-avail').innerHTML = ATTACH_CATS.map(c => {
+      const n = avail.filter(i => catOf(i.type) === c.key).length;
+      return `<button type="button" data-attach-cat="${c.key}" ${n ? '' : 'disabled'}>
+        <span>${c.icon} ${c.label}</span><span class="mono">${n}</span></button>`;
+    }).join('');
+    return;
+  }
+
+  // Step 2: that category's items, searchable.
+  search.classList.remove('hidden');
+  const def = ATTACH_CATS.find(c => c.key === attachCat);
+  $('#attach-filter').innerHTML =
+    `<button type="button" class="filter-chip" data-attach-back="1">‹ Categories</button>
+     <span class="cat-label">${def.icon} ${def.label}</span>`;
   const q = attachQ.toLowerCase();
   const rows = avail
-    .filter(i => attachCat === 'all' || catOf(i.type) === attachCat)
+    .filter(i => catOf(i.type) === attachCat)
     .filter(i => !q || i.name.toLowerCase().includes(q))
     .map(i => {
       const blocked = !i.ok;
@@ -358,15 +374,15 @@ function renderAvail() {
       </button>`;
     });
   $('#attach-avail').innerHTML = rows.join('')
-    || `<p class="sendone-empty">${state.kiosk.inventory.length
-      ? (q ? 'No items match the search.' : 'Everything in this category is already attached.')
-      : 'Kiosk reports no items yet — drop landmarks, notecards or objects into the kiosk prim in-world first.'}</p>`;
+    || `<p class="sendone-empty">${q ? 'No items match the search.'
+      : 'Everything in this category is already attached.'}</p>`;
 }
 
 $('#attach-filter').addEventListener('click', (e) => {
-  const chip = e.target.closest('button[data-attach-cat]');
-  if (!chip) return;
-  attachCat = chip.dataset.attachCat;
+  if (!e.target.closest('button[data-attach-back]')) return;
+  attachCat = null;
+  attachQ = '';
+  $('#attach-search').value = '';
   renderAvail();
 });
 
@@ -376,11 +392,18 @@ $('#attach-search').addEventListener('input', () => {
 });
 
 $('#attach-avail').addEventListener('click', (e) => {
+  const cat = e.target.closest('button[data-attach-cat]');
+  if (cat) {
+    attachCat = cat.dataset.attachCat;
+    attachQ = '';
+    $('#attach-search').value = '';
+    return renderAvail();
+  }
   const btn = e.target.closest('button[data-additem]');
   if (!btn) return;
   state.editItems.add(btn.dataset.additem);
   renderAttached();
-  renderAvail(); // item hops to the left pane; filters stay put
+  renderAvail(); // stays in the category for multi-add
 });
 
 function updateMsgCount() {
