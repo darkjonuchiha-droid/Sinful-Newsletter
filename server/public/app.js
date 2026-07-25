@@ -337,7 +337,11 @@ $('#btn-sub-add').addEventListener('click', addSubscriber);
 $('#sub-add-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') addSubscriber(); });
 async function addSubscriber() {
   const input = $('#sub-add-input').value.trim();
-  if (!input) return;
+  if (!input) {
+    toast('Type a UUID or legacy name in the box first, then press Add', 'err');
+    $('#sub-add-input').focus();
+    return;
+  }
   try {
     const r = await api('/subscribers', { method: 'POST', body: { input } });
     toast(r.note || 'Added', 'ok');
