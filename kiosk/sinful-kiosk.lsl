@@ -256,6 +256,11 @@ processWork(string body)
             key d1 = llRequestUserKey(toUsername(q));
             g_queries += [d1, "n2k", (string)lid];
         }
+        else if (kind == "key2disp")
+        {
+            key d3 = llRequestDisplayName((key)q);
+            g_queries += [d3, "d2n", (string)lid];
+        }
         else
         {
             key d2 = llRequestAgentData((key)q, DATA_NAME);
@@ -403,6 +408,11 @@ default
         if (type == "n2k")
         {
             if ((key)data) reportLookup(lid, "uuid", data);
+            else reportLookup(lid, "", "");
+        }
+        else if (type == "d2n") // display name
+        {
+            if (data != "") reportLookup(lid, "display", data);
             else reportLookup(lid, "", "");
         }
         else // k2n

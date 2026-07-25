@@ -458,7 +458,10 @@ function renderSubscribers() {
   $('#sub-rows').innerHTML = state.subscribers.map(s => `
     <tr class="${s.active ? '' : 'inactive-row'}" data-uuid="${s.uuid}">
       <td><input type="checkbox" class="row-sel" ${state.selected.has(s.uuid) ? 'checked' : ''}></td>
-      <td>${s.shadowbanned ? '<span title="Shadow-banned: looks subscribed to them, receives nothing">👻</span> ' : ''}${esc(s.name)}</td>
+      <td>${s.shadowbanned ? '<span title="Shadow-banned: looks subscribed to them, receives nothing">👻</span> ' : ''}${
+        s.display_name ? esc(s.display_name)
+          : '<span class="pending-disp" title="Waiting for the kiosk to resolve it">…</span>'}</td>
+      <td>${esc(s.name)}</td>
       <td class="mono" title="${s.uuid}">${s.uuid}</td>
       <td>
         ${(s.lists || []).map(l => `<span class="sub-list-tag">${esc(l.name)}</span>`).join('')}
@@ -770,7 +773,9 @@ async function renderSendOneResults(q) {
   const box = $('#sendone-results');
   const rows = data.subscribers.slice(0, 8).map(s => `
     <button data-sendone-uuid="${s.uuid}">
-      <span>${s.shadowbanned ? '👻 ' : ''}${esc(s.name)}${s.active ? '' : ' <em>(inactive)</em>'}</span>
+      <span>${s.shadowbanned ? '👻 ' : ''}${esc(s.display_name || s.name)}${
+        s.display_name && s.display_name !== s.name ? ` <em class="mono">${esc(s.name)}</em>` : ''
+      }${s.active ? '' : ' <em>(inactive)</em>'}</span>
       <span class="mono">${s.uuid.slice(0, 8)}…</span>
     </button>`);
   // Raw UUID pasted and not among the matches -> offer a direct send.

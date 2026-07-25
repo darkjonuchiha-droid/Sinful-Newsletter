@@ -239,6 +239,7 @@ textarea { resize: vertical; width: 100%; }
 .sub-table tr:last-child td { border-bottom: none; }
 .sub-table tr:hover td { background: #ffffff05; }
 .mono { font-family: ui-monospace, Consolas, monospace; font-size: .78rem; color: var(--muted); }
+.pending-disp { color: var(--muted); }
 .src-tag { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
 .inactive-row td { opacity: .45; }
 

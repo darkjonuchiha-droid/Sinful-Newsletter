@@ -150,9 +150,15 @@ router.get('/subscribers', wrap(async (req, res) => {
     params.push(listId);
   }
   if (q) {
+    // Lowercased comparison handles ASCII case; the raw comparison also
+    // covers accented/unicode names on SQLite, whose LOWER() is ASCII-only
+    // (Postgres lowercases unicode correctly, so both paths are covered).
     const like = `%${q.toLowerCase()}%`;
-    where.push('(LOWER(s.name) LIKE ? OR LOWER(s.uuid) LIKE ?)');
-    params.push(like, like);
+    const raw = `%${q}%`;
+    where.push(`(LOWER(s.name) LIKE ? OR s.name LIKE ?
+      OR LOWER(s.display_name) LIKE ? OR s.display_name LIKE ?
+      OR LOWER(s.uuid) LIKE ?)`);
+    params.push(like, raw, like, raw, like);
   }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY LOWER(s.name) LIMIT 500';

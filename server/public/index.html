@@ -67,7 +67,7 @@
     <div class="sub-toolbar">
       <input id="sub-add-input" type="text" placeholder='UUID or legacy name, e.g. "Lelouch Resident"'>
       <button id="btn-sub-add" class="btn btn-primary">Add</button>
-      <input id="sub-search" type="search" placeholder="Search…">
+      <input id="sub-search" type="search" placeholder="Search display / legacy name or UUID…">
     </div>
     <div id="pending-lookups" class="pending-lookups hidden"></div>
     <div id="bulk-bar" class="bulk-bar hidden">
@@ -85,7 +85,8 @@
       <table class="sub-table">
         <thead><tr>
           <th><input id="sel-all" type="checkbox" title="Select all shown"></th>
-          <th>Name</th><th>UUID</th><th>Lists</th><th>Source</th><th>Active</th><th></th>
+          <th>Display Name</th><th>Legacy Name</th><th>UUID</th>
+          <th>Lists</th><th>Source</th><th>Active</th><th></th>
         </tr></thead>
         <tbody id="sub-rows"></tbody>
       </table>

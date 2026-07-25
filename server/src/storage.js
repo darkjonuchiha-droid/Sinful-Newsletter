@@ -20,6 +20,7 @@ function schemaSql(kind) {
     `CREATE TABLE IF NOT EXISTS subscribers (
       uuid         TEXT PRIMARY KEY,
       name         TEXT NOT NULL,
+      display_name TEXT NOT NULL DEFAULT '',
       active       INTEGER NOT NULL DEFAULT 1,
       shadowbanned INTEGER NOT NULL DEFAULT 0,
       source       TEXT NOT NULL DEFAULT 'admin',
@@ -101,6 +102,7 @@ async function initSqlite() {
   try { db.exec('ALTER TABLE deliveries ADD COLUMN list_id INTEGER'); } catch (e) { /* exists */ }
   // deliveries.only_online: per-send override; NULL = use the package's flag
   try { db.exec('ALTER TABLE deliveries ADD COLUMN only_online INTEGER'); } catch (e) { /* exists */ }
+  try { db.exec("ALTER TABLE subscribers ADD COLUMN display_name TEXT NOT NULL DEFAULT ''"); } catch (e) { /* exists */ }
   return {
     kind: 'sqlite',
     async all(sql, p = []) { return db.prepare(sql).all(...p); },
@@ -121,6 +123,7 @@ async function initPg() {
   await pool.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS only_online INTEGER NOT NULL DEFAULT 0');
   await pool.query('ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS list_id INTEGER');
   await pool.query('ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS only_online INTEGER');
+  await pool.query("ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT ''");
   const conv = (sql) => { let i = 0; return sql.replace(/\?/g, () => '$' + (++i)); };
   return {
     kind: 'pg',

@@ -145,8 +145,27 @@ router.get('/work', wrap(async (req, res) => {
     WHERE status = 'inflight' AND claimed_at < ?
   `, [cutoff]);
 
-  const lookups = await db.all(
+  // Self-healing backfill: top the batch up with display-name lookups for
+  // subscribers that don't have one yet (each uuid is only ever queued once).
+  let lookups = await db.all(
     "SELECT id, kind, query FROM lookups WHERE status = 'pending' ORDER BY id LIMIT 5");
+  if (lookups.length < 5) {
+    const need = await db.all(`
+      SELECT s.uuid FROM subscribers s
+      WHERE s.display_name = ''
+        AND NOT EXISTS (SELECT 1 FROM lookups l
+          WHERE l.kind = 'key2disp' AND l.query = s.uuid)
+      LIMIT ?
+    `, [5 - lookups.length]);
+    if (need.length) {
+      for (const n of need) {
+        await db.run("INSERT INTO lookups (kind, query, created_at) VALUES ('key2disp', ?, ?)",
+          [n.uuid, db.now()]);
+      }
+      lookups = await db.all(
+        "SELECT id, kind, query FROM lookups WHERE status = 'pending' ORDER BY id LIMIT 5");
+    }
+  }
 
   const rows = await db.all(`
     SELECT d.id, d.uuid, p.name, p.message, p.items,
@@ -195,6 +214,18 @@ router.post('/report', wrap(async (req, res) => {
       } else if (row.kind === 'key2name' && typeof l.name === 'string' && l.name.length > 0) {
         await db.run('UPDATE subscribers SET name = ? WHERE uuid = ?', [l.name, row.query]);
         await db.run("UPDATE lookups SET status = 'done' WHERE id = ?", [l.id]);
+      } else if (row.kind === 'key2disp') {
+        // Older kiosk scripts answer with `name` (legacy) — accept either.
+        const disp = (typeof l.display === 'string' && l.display)
+          || (typeof l.name === 'string' && l.name) || '';
+        if (disp) {
+          await db.run('UPDATE subscribers SET display_name = ? WHERE uuid = ?', [disp, row.query]);
+          await db.run("UPDATE lookups SET status = 'done' WHERE id = ?", [l.id]);
+        } else {
+          // Fall back to the legacy name so we don't re-queue forever.
+          await db.run('UPDATE subscribers SET display_name = name WHERE uuid = ?', [row.query]);
+          await db.run("UPDATE lookups SET status = 'notfound' WHERE id = ?", [l.id]);
+        }
       } else {
         await db.run("UPDATE lookups SET status = 'notfound' WHERE id = ?", [l.id]);
         if (row.kind === 'key2name') {
