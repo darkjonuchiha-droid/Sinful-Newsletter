@@ -641,8 +641,17 @@ async function loadKiosk() {
 // ---------------- lists ----------------
 
 async function loadLists() {
-  state.lists = (await api('/lists')).lists;
+  const data = await api('/lists');
+  state.lists = data.lists;           // real lists (membership-editable)
+  state.special = data.special || []; // system audiences (auto, negative ids)
   renderListChips();
+}
+
+// Real lists + system audiences, for send/schedule target pickers.
+function allAudiences() {
+  return state.lists.concat(state.special.map(s => ({
+    id: s.id, name: `${s.icon} ${s.name}`, members: s.members,
+  })));
 }
 
 function renderListChips() {
@@ -654,7 +663,14 @@ function renderListChips() {
        ${esc(l.name)}<span class="n">${l.members}</span>
      </button>`));
   chips.push('<button class="list-chip" data-newlist="1">+ New list</button>');
-  if (state.filterList) {
+  // System audiences: maintained automatically, never offered at the kiosk.
+  chips.push(...(state.special || []).map(s =>
+    `<button class="list-chip special ${state.filterList === s.id ? 'active' : ''}"
+       data-list="${s.id}" title="Automatic — everyone currently ${s.id === -1
+         ? 'shadow-banned' : 'inactive'}. Not offered to subscribers at the kiosk.">
+       ${s.icon} ${esc(s.name)}<span class="n">${s.members}</span>
+     </button>`));
+  if (state.filterList > 0) { // system audiences can't be deleted
     chips.push(`<button class="btn btn-ghost btn-mini" data-dellist="${state.filterList}">Delete this list</button>`);
   }
   wrap.innerHTML = chips.join('');
@@ -694,6 +710,7 @@ $('#list-chips').addEventListener('click', async (e) => {
 
 function openMemberModal(sub) {
   if (!sub) return;
+  // Only real lists here — system audiences follow the flags automatically.
   if (!state.lists.length) {
     return toast('Create a list first (the "+ New list" chip above the table)', 'err');
   }
@@ -798,19 +815,20 @@ let sendListPkg = null;
 function fillListSelect(sel, includeAll) {
   const opts = [];
   if (includeAll) opts.push('<option value="0">All subscribers</option>');
-  for (const l of state.lists) {
+  for (const l of allAudiences()) {
     opts.push(`<option value="${l.id}">${esc(l.name)} (${l.members})</option>`);
   }
   sel.innerHTML = opts.join('');
 }
 
 function openSendList(pkg) {
-  if (!state.lists.length) {
+  const targets = allAudiences();
+  if (!targets.length) {
     return toast('No lists yet — create one on the Subscribers tab first', 'err');
   }
   sendListPkg = pkg;
   $('#sendlist-title').textContent = `Send “${pkg.name}” to which list(s)?`;
-  $('#sendlist-checks').innerHTML = state.lists.map(l => `
+  $('#sendlist-checks').innerHTML = targets.map(l => `
     <label><input type="checkbox" data-send-list="${l.id}">
       ${esc(l.name)} <em style="color:var(--muted)">(${l.members})</em></label>`).join('');
   $('#sendlist-overlay').classList.remove('hidden');
@@ -824,7 +842,7 @@ $('#btn-sendlist-go').addEventListener('click', async () => {
   const picked = [...document.querySelectorAll('#sendlist-checks input:checked')]
     .map(cb => Number(cb.dataset.sendList));
   if (!picked.length) return toast('Tick at least one list', 'err');
-  const names = state.lists.filter(l => picked.includes(l.id)).map(l => l.name);
+  const names = allAudiences().filter(l => picked.includes(l.id)).map(l => l.name);
   $('#sendlist-overlay').classList.add('hidden');
   if (!await confirmModal(`Send “${sendListPkg.name}” to “${names.join('” + “')}” now? `
     + `Members of several of these lists receive it once.`)) return;
@@ -955,7 +973,7 @@ $('#log-audiences').addEventListener('click', async (e) => {
   const onlyOnline = btn.closest('.audience-row')
     .querySelector('input[data-relist-oo]').checked;
   const label = listId === 0 ? 'All subscribers'
-    : (state.lists.find(l => l.id === listId) || { name: 'this list' }).name;
+    : (allAudiences().find(l => l.id === listId) || { name: 'this list' }).name;
   if (!await confirmModal(`Redeliver “${logPkg.name}” to ${label}`
     + `${onlyOnline ? ' (only members currently online)' : ''}?`
     + ` Anyone already queued won't be queued twice.`)) return;

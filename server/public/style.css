@@ -436,6 +436,8 @@ textarea { resize: vertical; width: 100%; }
 .list-chip:hover { color: var(--text); }
 .list-chip.active { color: var(--rose); border-color: var(--rose); background: var(--rose-soft); }
 .list-chip .n { color: var(--gold); font-weight: 400; margin-left: .3rem; }
+.list-chip.special { border-style: dashed; }
+.list-chip.special.active { border-style: solid; }
 .sub-list-tag {
   font-size: .7rem; color: var(--gold);
   border: 1px solid #d9a44133; border-radius: 999px;

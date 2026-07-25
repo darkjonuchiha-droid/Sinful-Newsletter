@@ -81,6 +81,12 @@ Open the dashboard, log in, and:
   UUID/name — perfect for people who joined late.
 - Residents touch the kiosk to **Subscribe / Unsubscribe / Get Latest**
   (self-service redelivery of the newest package).
+- **System audiences**: two dashed chips — 👻 **Shadow-banned** and 💤
+  **Inactive** — are maintained automatically from the subscriber flags
+  (no membership to manage, never out of sync). Click one to see who's in
+  it; they can be chosen as send/schedule targets when you deliberately
+  want to reach those people, and they are never offered to residents at
+  a kiosk or satellite.
 - **Lists** (audience segments): create them on the Subscribers tab
   (`+ New list` chip, names ≤ 20 chars — they double as kiosk dialog
   buttons). Filter the table by list, and edit any subscriber's

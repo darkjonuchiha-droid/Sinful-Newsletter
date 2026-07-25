@@ -3,7 +3,10 @@ const express = require('express');
 const db = require('./storage');
 const config = require('./config');
 const auth = require('./auth');
-const { pingKiosk, kioskOnline, kioskRow, UUID_RE, wrap, fireDueSchedules } = require('./kiosk-api');
+const { pingKiosk, kioskOnline, kioskRow, UUID_RE, wrap, fireDueSchedules,
+  queueAudience, SPECIAL_LISTS } = require('./kiosk-api');
+
+const specialName = (id) => (SPECIAL_LISTS[String(id)] || {}).name;
 
 const router = express.Router();
 
@@ -80,7 +83,15 @@ router.get('/lists', wrap(async (req, res) => {
     FROM lists l LEFT JOIN list_members m ON m.list_id = l.id
     GROUP BY l.id, l.name ORDER BY LOWER(l.name)
   `);
-  res.json({ lists: rows });
+  // System audiences — computed live from subscriber flags, never stored,
+  // never offered by the kiosk's subscribe picker.
+  const special = [
+    { id: -1, name: SPECIAL_LISTS['-1'].name, icon: '👻',
+      members: (await db.get('SELECT COUNT(*) AS n FROM subscribers WHERE shadowbanned = 1')).n },
+    { id: -2, name: SPECIAL_LISTS['-2'].name, icon: '💤',
+      members: (await db.get('SELECT COUNT(*) AS n FROM subscribers WHERE active = 0')).n },
+  ];
+  res.json({ lists: rows, special });
 }));
 
 router.post('/lists', wrap(async (req, res) => {
@@ -130,15 +141,20 @@ router.get('/subscribers', wrap(async (req, res) => {
   const listId = Number(req.query.list) || 0;
   let sql = 'SELECT s.* FROM subscribers s';
   const params = [];
-  if (listId) {
+  const where = [];
+  if (listId < 0) {
+    const spec = SPECIAL_LISTS[String(listId)];
+    if (spec) where.push(spec.where);
+  } else if (listId > 0) {
     sql += ' JOIN list_members m ON m.uuid = s.uuid AND m.list_id = ?';
     params.push(listId);
   }
   if (q) {
     const like = `%${q.toLowerCase()}%`;
-    sql += ' WHERE LOWER(s.name) LIKE ? OR LOWER(s.uuid) LIKE ?';
+    where.push('(LOWER(s.name) LIKE ? OR LOWER(s.uuid) LIKE ?)');
     params.push(like, like);
   }
+  if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY LOWER(s.name) LIMIT 500';
   const rows = await db.all(sql, params);
   // Attach each subscriber's list memberships (portable: assembled in JS).
@@ -273,6 +289,7 @@ async function packageStats(id) {
   `, [id]);
   stats.audiences = rows.map(r => {
     if (r.list_id === 0) return 'All subscribers';
+    if (r.list_id < 0) return specialName(r.list_id) || '(system)';
     return r.name || '(deleted list)';
   }).sort();
   return stats;
@@ -332,15 +349,14 @@ router.post('/packages/:id/send', wrap(async (req, res) => {
   const pkg = await db.get('SELECT id FROM packages WHERE id = ?', [id]);
   if (!pkg) return res.status(404).json({ error: 'no such package' });
 
+  // Positive ids = real lists; negative = system audiences (shadow-banned,
+  // inactive) which are deliberately targetable but never auto-included.
   let listIds = (req.body && req.body.list_ids) || [];
   if (!Array.isArray(listIds)) listIds = [];
-  listIds = [...new Set(listIds.map(Number).filter(n => Number.isInteger(n) && n > 0))];
+  listIds = [...new Set(listIds.map(Number)
+    .filter(n => Number.isInteger(n) && (n > 0 || SPECIAL_LISTS[String(n)])))];
   const legacy = Number(req.body && req.body.list_id) || 0;
   if (legacy && !listIds.length) listIds = [legacy];
-
-  const notAlreadyQueued = `
-    AND NOT EXISTS (SELECT 1 FROM deliveries d2
-      WHERE d2.package_id = ? AND d2.uuid = s.uuid AND d2.status = 'queued')`;
 
   // Optional per-send only-online override (NULL = use the package's flag).
   let oo = null;
@@ -349,26 +365,13 @@ router.post('/packages/:id/send', wrap(async (req, res) => {
   let queued = 0;
   if (listIds.length) {
     for (const lid of listIds) {
-      if (!await db.get('SELECT id FROM lists WHERE id = ?', [lid])) {
+      if (lid > 0 && !await db.get('SELECT id FROM lists WHERE id = ?', [lid])) {
         return res.status(404).json({ error: `no such list (id ${lid})` });
       }
     }
-    for (const lid of listIds) {
-      const r = await db.run(`
-        INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id, only_online)
-        SELECT ?, s.uuid, 'queued', ?, ?, ? FROM subscribers s
-        JOIN list_members m ON m.uuid = s.uuid AND m.list_id = ?
-        WHERE s.active = 1 AND s.shadowbanned = 0 ${notAlreadyQueued}
-      `, [id, db.now(), lid, oo, lid, id]);
-      queued += r.changes;
-    }
+    for (const lid of listIds) queued += await queueAudience(id, lid, oo);
   } else {
-    const r = await db.run(`
-      INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id, only_online)
-      SELECT ?, s.uuid, 'queued', ?, 0, ? FROM subscribers s
-      WHERE s.active = 1 AND s.shadowbanned = 0 ${notAlreadyQueued}
-    `, [id, db.now(), oo, id]);
-    queued = r.changes;
+    queued = await queueAudience(id, 0, oo);
   }
   await pingKiosk();
   res.json({ ok: true, queued, kioskOnline: await kioskOnline() });
@@ -416,8 +419,11 @@ router.post('/packages/:id/schedule', wrap(async (req, res) => {
     return res.status(400).json({ error: 'that time is in the past' });
   }
   const listId = Number(req.body && req.body.list_id) || 0;
-  if (listId && !await db.get('SELECT id FROM lists WHERE id = ?', [listId])) {
+  if (listId > 0 && !await db.get('SELECT id FROM lists WHERE id = ?', [listId])) {
     return res.status(404).json({ error: 'no such list' });
+  }
+  if (listId < 0 && !SPECIAL_LISTS[String(listId)]) {
+    return res.status(404).json({ error: 'no such audience' });
   }
   const sid = await db.insert(
     "INSERT INTO schedules (package_id, send_at, status, created_at, list_id) VALUES (?, ?, 'pending', ?, ?)",
@@ -428,12 +434,18 @@ router.post('/packages/:id/schedule', wrap(async (req, res) => {
 // All schedules (pending + history) with package names, newest-relevant first.
 router.get('/schedules', wrap(async (req, res) => {
   const rows = await db.all(`
-    SELECT s.id, s.package_id, s.send_at, s.status, s.fired_at, p.name, l.name AS list_name
+    SELECT s.id, s.package_id, s.send_at, s.status, s.fired_at, s.list_id,
+           p.name, l.name AS list_name
     FROM schedules s JOIN packages p ON p.id = s.package_id
     LEFT JOIN lists l ON l.id = s.list_id
     ORDER BY s.send_at DESC LIMIT 300
   `);
-  res.json({ schedules: rows });
+  res.json({
+    schedules: rows.map(r => ({
+      ...r,
+      list_name: r.list_id < 0 ? specialName(r.list_id) : r.list_name,
+    })),
+  });
 }));
 
 // Cancel a pending schedule.
@@ -461,7 +473,9 @@ router.get('/deliveries', wrap(async (req, res) => {
     WHERE d.package_id = ? AND d.list_id IS NOT NULL
   `, [pkgId])).map(a => ({
     list_id: a.list_id,
-    name: a.list_id === 0 ? 'All subscribers' : a.name, // null name = deleted list
+    // null name on a positive id = the list was deleted
+    name: a.list_id === 0 ? 'All subscribers'
+      : (a.list_id < 0 ? (specialName(a.list_id) || '(system)') : a.name),
   }));
   res.json({ deliveries: rows, stats: await packageStats(pkgId), audiences });
 }));

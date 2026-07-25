@@ -51,6 +51,51 @@ function withFooter(msg, uuid) {
   return msg ? msg + '\n\n' + footer : footer;
 }
 
+// System audiences: computed from subscriber flags, never stored as list
+// memberships (so they can't drift) and never offered by the kiosk's
+// subscribe picker. Referenced by negative ids.
+const SPECIAL_LISTS = {
+  '-1': { name: 'Shadow-banned', where: 's.shadowbanned = 1' },
+  '-2': { name: 'Inactive', where: 's.active = 0' },
+};
+
+// Queue one audience's deliveries for a package.
+//   listId 0 = all active subscribers, >0 = that list, <0 = system audience.
+// `oo` is the per-send only-online override (null = use the package's flag).
+// Never queues someone who already has a pending delivery of this package.
+async function queueAudience(packageId, listId, oo) {
+  const notAlreadyQueued = `
+    AND NOT EXISTS (SELECT 1 FROM deliveries d2
+      WHERE d2.package_id = ? AND d2.uuid = s.uuid AND d2.status = 'queued')`;
+  if (listId < 0) {
+    const spec = SPECIAL_LISTS[String(listId)];
+    if (!spec) return 0;
+    // Deliberate targeting: these audiences ignore the usual
+    // active/shadow-ban exclusions — that is the point of choosing them.
+    const r = await db.run(`
+      INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id, only_online)
+      SELECT ?, s.uuid, 'queued', ?, ?, ? FROM subscribers s
+      WHERE ${spec.where} ${notAlreadyQueued}
+    `, [packageId, db.now(), listId, oo, packageId]);
+    return r.changes;
+  }
+  if (listId > 0) {
+    const r = await db.run(`
+      INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id, only_online)
+      SELECT ?, s.uuid, 'queued', ?, ?, ? FROM subscribers s
+      JOIN list_members m ON m.uuid = s.uuid AND m.list_id = ?
+      WHERE s.active = 1 AND s.shadowbanned = 0 ${notAlreadyQueued}
+    `, [packageId, db.now(), listId, oo, listId, packageId]);
+    return r.changes;
+  }
+  const r = await db.run(`
+    INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id, only_online)
+    SELECT ?, s.uuid, 'queued', ?, 0, ? FROM subscribers s
+    WHERE s.active = 1 AND s.shadowbanned = 0 ${notAlreadyQueued}
+  `, [packageId, db.now(), oo, packageId]);
+  return r.changes;
+}
+
 // Enqueue deliveries for any schedule whose time has come. Called from the
 // kiosk heartbeat/work endpoints (a reliable ~5-min clock on every
 // deployment, including serverless), the admin overview, and — when
@@ -60,23 +105,9 @@ async function fireDueSchedules() {
     "SELECT * FROM schedules WHERE status = 'pending' AND send_at <= ?", [db.now()]);
   let fired = 0;
   for (const s of due) {
-    let r;
-    if (s.list_id) {
-      r = await db.run(`
-        INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id)
-        SELECT ?, sub.uuid, 'queued', ?, ? FROM subscribers sub
-        JOIN list_members m ON m.uuid = sub.uuid AND m.list_id = ?
-        WHERE sub.active = 1 AND sub.shadowbanned = 0
-      `, [s.package_id, db.now(), s.list_id, s.list_id]);
-    } else {
-      r = await db.run(`
-        INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id)
-        SELECT ?, uuid, 'queued', ?, 0 FROM subscribers WHERE active = 1 AND shadowbanned = 0
-      `, [s.package_id, db.now()]);
-    }
+    fired += await queueAudience(s.package_id, s.list_id || 0, null);
     await db.run("UPDATE schedules SET status = 'sent', fired_at = ? WHERE id = ?",
       [db.now(), s.id]);
-    fired += r.changes;
   }
   return fired;
 }
@@ -278,4 +309,5 @@ router.post('/request-latest', wrap(async (req, res) => {
   res.json({ ok: true, name: pkg.name });
 }));
 
-module.exports = { router, pingKiosk, kioskOnline, kioskRow, UUID_RE, wrap, fireDueSchedules };
+module.exports = { router, pingKiosk, kioskOnline, kioskRow, UUID_RE, wrap,
+  fireDueSchedules, queueAudience, SPECIAL_LISTS };
