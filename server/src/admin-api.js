@@ -251,14 +251,26 @@ router.delete('/subscribers/:uuid', wrap(async (req, res) => {
 // ---------- packages ----------
 
 async function packageStats(id) {
-  return db.get(`
+  const stats = await db.get(`
     SELECT
       SUM(CASE WHEN status IN ('queued','inflight') THEN 1 ELSE 0 END) AS pending,
       SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
       SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
-      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+      COUNT(DISTINCT CASE WHEN status = 'sent' THEN uuid END) AS reached
     FROM deliveries WHERE package_id = ?
   `, [id]);
+  // Audiences this package has been sent to (0 = all-subscriber blast).
+  const rows = await db.all(`
+    SELECT DISTINCT d.list_id, l.name FROM deliveries d
+    LEFT JOIN lists l ON l.id = d.list_id
+    WHERE d.package_id = ? AND d.list_id IS NOT NULL
+  `, [id]);
+  stats.audiences = rows.map(r => {
+    if (r.list_id === 0) return 'All subscribers';
+    return r.name || '(deleted list)';
+  }).sort();
+  return stats;
 }
 
 router.get('/packages', wrap(async (req, res) => {
@@ -306,31 +318,51 @@ router.delete('/packages/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// Send to every active subscriber, or to one list via body.list_id.
+// Send to every active subscriber, or to one or more lists.
+// Body: {} = all; { list_ids: [1,2] } (or legacy { list_id: 1 }) = those lists.
+// Members of several selected lists get exactly ONE delivery, and anyone
+// already queued for this package is not queued again.
 router.post('/packages/:id/send', wrap(async (req, res) => {
   const id = Number(req.params.id);
   const pkg = await db.get('SELECT id FROM packages WHERE id = ?', [id]);
   if (!pkg) return res.status(404).json({ error: 'no such package' });
-  const listId = Number(req.body && req.body.list_id) || 0;
-  let r;
-  if (listId) {
-    if (!await db.get('SELECT id FROM lists WHERE id = ?', [listId])) {
-      return res.status(404).json({ error: 'no such list' });
+
+  let listIds = (req.body && req.body.list_ids) || [];
+  if (!Array.isArray(listIds)) listIds = [];
+  listIds = [...new Set(listIds.map(Number).filter(n => Number.isInteger(n) && n > 0))];
+  const legacy = Number(req.body && req.body.list_id) || 0;
+  if (legacy && !listIds.length) listIds = [legacy];
+
+  const notAlreadyQueued = `
+    AND NOT EXISTS (SELECT 1 FROM deliveries d2
+      WHERE d2.package_id = ? AND d2.uuid = s.uuid AND d2.status = 'queued')`;
+
+  let queued = 0;
+  if (listIds.length) {
+    for (const lid of listIds) {
+      if (!await db.get('SELECT id FROM lists WHERE id = ?', [lid])) {
+        return res.status(404).json({ error: `no such list (id ${lid})` });
+      }
     }
-    r = await db.run(`
-      INSERT INTO deliveries (package_id, uuid, status, queued_at)
-      SELECT ?, s.uuid, 'queued', ? FROM subscribers s
-      JOIN list_members m ON m.uuid = s.uuid AND m.list_id = ?
-      WHERE s.active = 1 AND s.shadowbanned = 0
-    `, [id, db.now(), listId]);
+    for (const lid of listIds) {
+      const r = await db.run(`
+        INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id)
+        SELECT ?, s.uuid, 'queued', ?, ? FROM subscribers s
+        JOIN list_members m ON m.uuid = s.uuid AND m.list_id = ?
+        WHERE s.active = 1 AND s.shadowbanned = 0 ${notAlreadyQueued}
+      `, [id, db.now(), lid, lid, id]);
+      queued += r.changes;
+    }
   } else {
-    r = await db.run(`
-      INSERT INTO deliveries (package_id, uuid, status, queued_at)
-      SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1 AND shadowbanned = 0
-    `, [id, db.now()]);
+    const r = await db.run(`
+      INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id)
+      SELECT ?, s.uuid, 'queued', ?, 0 FROM subscribers s
+      WHERE s.active = 1 AND s.shadowbanned = 0 ${notAlreadyQueued}
+    `, [id, db.now(), id]);
+    queued = r.changes;
   }
   await pingKiosk();
-  res.json({ ok: true, queued: r.changes, kioskOnline: await kioskOnline() });
+  res.json({ ok: true, queued, kioskOnline: await kioskOnline() });
 }));
 
 // Send to a single avatar (UUID, or the name of an existing subscriber).

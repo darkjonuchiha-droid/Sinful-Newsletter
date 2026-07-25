@@ -176,9 +176,12 @@ function renderPackages() {
         <div class="pkg-foot">
           <div class="pkg-stats">
             <span>sent <b>${sent}</b></span>
+            <span title="Distinct subscribers who received it at least once">reached <b>${stats.reached || 0}</b></span>
             <span class="stat-pending">pending <b>${pending}</b></span>
             ${skipped ? `<span>skipped <b>${skipped}</b></span>` : ''}
             <span class="stat-failed">failed <b>${failed}</b></span>
+            ${(stats.audiences || []).length
+              ? `<span class="pkg-audiences" title="Audiences this package was sent to">via ${esc(stats.audiences.join(', '))}</span>` : ''}
           </div>
           <div class="pkg-actions">
             <button class="btn btn-primary btn-mini" data-act="send">Send to all</button>
@@ -631,8 +634,10 @@ function openSendList(pkg) {
     return toast('No lists yet — create one on the Subscribers tab first', 'err');
   }
   sendListPkg = pkg;
-  $('#sendlist-title').textContent = `Send “${pkg.name}” to which list?`;
-  fillListSelect($('#sendlist-select'), false);
+  $('#sendlist-title').textContent = `Send “${pkg.name}” to which list(s)?`;
+  $('#sendlist-checks').innerHTML = state.lists.map(l => `
+    <label><input type="checkbox" data-send-list="${l.id}">
+      ${esc(l.name)} <em style="color:var(--muted)">(${l.members})</em></label>`).join('');
   $('#sendlist-overlay').classList.remove('hidden');
 }
 
@@ -641,16 +646,18 @@ $('#btn-sendlist-cancel').addEventListener('click', () =>
 
 $('#btn-sendlist-go').addEventListener('click', async () => {
   if (!sendListPkg) return;
-  const listId = Number($('#sendlist-select').value);
-  const l = state.lists.find(x => x.id === listId);
+  const picked = [...document.querySelectorAll('#sendlist-checks input:checked')]
+    .map(cb => Number(cb.dataset.sendList));
+  if (!picked.length) return toast('Tick at least one list', 'err');
+  const names = state.lists.filter(l => picked.includes(l.id)).map(l => l.name);
   $('#sendlist-overlay').classList.add('hidden');
-  if (!l) return;
-  if (!await confirmModal(`Send “${sendListPkg.name}” to the ${l.members} member(s) of “${l.name}” now?`)) return;
+  if (!await confirmModal(`Send “${sendListPkg.name}” to “${names.join('” + “')}” now? `
+    + `Members of several of these lists receive it once.`)) return;
   try {
     const r = await api(`/packages/${sendListPkg.id}/send`, {
-      method: 'POST', body: { list_id: listId },
+      method: 'POST', body: { list_ids: picked },
     });
-    toast(`Queued ${r.queued} deliveries to “${l.name}”`, 'ok');
+    toast(`Queued ${r.queued} deliveries to ${names.join(', ')}`, 'ok');
     loadPackages();
   } catch (err) { toast(err.message, 'err'); }
 });

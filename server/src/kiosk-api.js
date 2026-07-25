@@ -63,15 +63,15 @@ async function fireDueSchedules() {
     let r;
     if (s.list_id) {
       r = await db.run(`
-        INSERT INTO deliveries (package_id, uuid, status, queued_at)
-        SELECT ?, sub.uuid, 'queued', ? FROM subscribers sub
+        INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id)
+        SELECT ?, sub.uuid, 'queued', ?, ? FROM subscribers sub
         JOIN list_members m ON m.uuid = sub.uuid AND m.list_id = ?
         WHERE sub.active = 1 AND sub.shadowbanned = 0
-      `, [s.package_id, db.now(), s.list_id]);
+      `, [s.package_id, db.now(), s.list_id, s.list_id]);
     } else {
       r = await db.run(`
-        INSERT INTO deliveries (package_id, uuid, status, queued_at)
-        SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1 AND shadowbanned = 0
+        INSERT INTO deliveries (package_id, uuid, status, queued_at, list_id)
+        SELECT ?, uuid, 'queued', ?, 0 FROM subscribers WHERE active = 1 AND shadowbanned = 0
       `, [s.package_id, db.now()]);
     }
     await db.run("UPDATE schedules SET status = 'sent', fired_at = ? WHERE id = ?",
