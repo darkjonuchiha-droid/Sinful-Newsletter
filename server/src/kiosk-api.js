@@ -32,8 +32,11 @@ async function pingKiosk() {
   } catch { /* kiosk will pick work up on its next heartbeat */ }
 }
 
+// Newest PUBLIC package — private ones are never offered by "Get Latest"
+// (at the primary kiosk, at satellites, or from the kiosk's offline cache).
 async function latestPackage() {
-  const p = await db.get('SELECT id, name, message, items FROM packages ORDER BY id DESC LIMIT 1');
+  const p = await db.get(
+    'SELECT id, name, message, items FROM packages WHERE is_public = 1 ORDER BY id DESC LIMIT 1');
   if (!p) return null;
   return { id: p.id, name: p.name, msg: p.message, items: JSON.parse(p.items) };
 }

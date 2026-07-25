@@ -167,6 +167,9 @@ function renderPackages() {
     if (p.only_online) {
       chips = `<span class="item-chip oo-chip" title="Delivered only to subscribers in-world at send time">🟢 online only</span>` + chips;
     }
+    if (!p.is_public) {
+      chips = `<span class="item-chip private-chip" title="Private — never offered by Get Latest; only people you send it to receive it">🔒 private</span>` + chips;
+    }
     const progress = pending > 0 && total > 0
       ? `<div class="progress"><div style="width:${Math.round(100 * (sent + skipped) / total)}%"></div></div>` : '';
     return `
@@ -266,6 +269,7 @@ function openEditor(pkg) {
   $('#pkg-name').value = pkg ? pkg.name : '';
   $('#pkg-message').value = pkg ? pkg.message : '';
   $('#pkg-oo').checked = !!(pkg && pkg.only_online);
+  $('#pkg-private').checked = pkg ? !pkg.is_public : false;
   updateMsgCount();
   renderItemGrid();
   $('#editor-overlay').classList.remove('hidden');
@@ -417,6 +421,7 @@ $('#btn-pkg-save').addEventListener('click', async () => {
     message: $('#pkg-message').value.trim(),
     items: [...state.editItems],
     only_online: $('#pkg-oo').checked,
+    is_public: !$('#pkg-private').checked,
   };
   if (!body.name) return toast('Give the package a name', 'err');
   try {

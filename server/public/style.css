@@ -366,6 +366,7 @@ textarea { resize: vertical; width: 100%; }
 .oo-check input { accent-color: var(--ok); margin-top: .15rem; }
 .oo-check b { color: var(--text); }
 .oo-chip { color: var(--ok); border-color: #5ad48a44; background: #5ad48a11; }
+.private-chip { color: var(--rose); border-color: #ff3d6e55; background: #ff3d6e14; }
 .st-skip { color: var(--muted); }
 .inline-warn {
   background: #d9a44115; border: 1px solid #d9a44140;

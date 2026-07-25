@@ -76,7 +76,10 @@ Open the dashboard, log in, and:
   deleting), or remove.
 - **Packages** — create with a name (becomes the received folder's name), a
   message (≤ 800 chars, IM limit), and attachments ticked from the kiosk's
-  actual inventory. *Send to all* queues a delivery per active subscriber;
+  actual inventory. Tick **🔒 Private** for members-only packages: they are
+  never offered by “Get Latest” at kiosks or satellites (which always serve
+  the newest *public* package), but you can still send them to anyone or
+  any list normally. *Send to all* queues a delivery per active subscriber;
   progress is shown live on the card. *Send to one…* delivers to a single
   UUID/name — perfect for people who joined late.
 - Residents touch the kiosk to **Subscribe / Unsubscribe / Get Latest**
