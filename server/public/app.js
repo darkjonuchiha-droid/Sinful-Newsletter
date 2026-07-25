@@ -639,14 +639,15 @@ function openSendOne(pkg) {
   sendOnePkg = pkg;
   $('#sendone-title').textContent = `Send “${pkg.name}” to one person:`;
   $('#sendone-search').value = '';
+  $('#sendone-results').innerHTML = '';
   $('#sendone-overlay').classList.remove('hidden');
-  renderSendOneResults('');
   $('#sendone-search').focus();
 }
 
 let sendOneSeq = 0;
 async function renderSendOneResults(q) {
   const seq = ++sendOneSeq;
+  if (!q) { $('#sendone-results').innerHTML = ''; return; } // blank until typed
   const data = await api('/subscribers' + (q ? `?q=${encodeURIComponent(q)}` : ''));
   if (seq !== sendOneSeq) return; // a newer search superseded this response
   const box = $('#sendone-results');
