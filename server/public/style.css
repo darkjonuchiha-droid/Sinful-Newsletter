@@ -183,6 +183,27 @@ textarea { resize: vertical; width: 100%; }
 .stat-pending b { color: var(--gold); }
 .stat-failed b { color: var(--bad); }
 .pkg-actions { display: flex; gap: .45rem; flex-wrap: wrap; }
+.dropdown { position: relative; display: inline-block; }
+.drop-menu {
+  position: absolute; right: 0; top: calc(100% + 5px); z-index: 30;
+  min-width: 165px;
+  display: grid;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 16px 44px #000000aa;
+}
+.drop-menu.hidden { display: none; }
+.drop-menu button {
+  font: inherit; font-size: .84rem; font-weight: 700;
+  text-align: left;
+  background: none; border: none;
+  color: var(--text);
+  padding: .55rem .95rem;
+  cursor: pointer;
+}
+.drop-menu button:hover { background: var(--rose-soft); color: var(--rose); }
 .progress {
   height: 5px; border-radius: 4px; overflow: hidden;
   background: var(--bg0);

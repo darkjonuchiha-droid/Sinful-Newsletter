@@ -184,10 +184,15 @@ function renderPackages() {
               ? `<span class="pkg-audiences" title="Audiences this package was sent to">via ${esc(stats.audiences.join(', '))}</span>` : ''}
           </div>
           <div class="pkg-actions">
-            <button class="btn btn-primary btn-mini" data-act="send">Send to all</button>
-            <button class="btn btn-ghost btn-mini" data-act="sendlist">Send to list…</button>
+            <div class="dropdown">
+              <button class="btn btn-primary btn-mini" data-act="sendmenu">Send ▾</button>
+              <div class="drop-menu hidden">
+                <button data-act="send">Send to all</button>
+                <button data-act="sendlist">Send to list…</button>
+                <button data-act="test">Send to one…</button>
+              </div>
+            </div>
             <button class="btn btn-ghost btn-mini" data-act="schedule">Schedule…</button>
-            <button class="btn btn-ghost btn-mini" data-act="test">Send to one…</button>
             <button class="btn btn-ghost btn-mini" data-act="log">Log</button>
             <button class="btn btn-ghost btn-mini" data-act="edit">Edit</button>
             <button class="btn btn-ghost btn-mini" data-act="delete">Delete</button>
@@ -197,6 +202,15 @@ function renderPackages() {
   }).join('');
 }
 
+function closeSendMenus(except) {
+  document.querySelectorAll('.drop-menu').forEach(m => {
+    if (m !== except) m.classList.add('hidden');
+  });
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.dropdown')) closeSendMenus();
+});
+
 $('#package-list').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
@@ -204,6 +218,14 @@ $('#package-list').addEventListener('click', async (e) => {
   const pkg = state.packages.find(p => p.id === id);
   if (!pkg) return;
   const act = btn.dataset.act;
+
+  if (act === 'sendmenu') {
+    const menu = btn.parentElement.querySelector('.drop-menu');
+    closeSendMenus(menu);
+    menu.classList.toggle('hidden');
+    return;
+  }
+  closeSendMenus();
 
   if (act === 'edit') return openEditor(pkg);
   if (act === 'schedule') return openSchedule(pkg);
