@@ -178,18 +178,20 @@ router.post('/report', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// In-world subscribe/unsubscribe touches.
+// In-world subscribe/unsubscribe touches (from the primary or a satellite;
+// satellites pass their label as `src` so signups show their origin).
 router.post('/event', wrap(async (req, res) => {
   const { type, uuid, name } = req.body || {};
   if (typeof uuid !== 'string' || !UUID_RE.test(uuid)) {
     return res.status(400).json({ error: 'bad uuid' });
   }
   const u = uuid.toLowerCase();
+  const src = String((req.body && req.body.src) || 'kiosk').slice(0, 24) || 'kiosk';
   if (type === 'sub') {
     await db.run(`
-      INSERT INTO subscribers (uuid, name, source, created_at) VALUES (?, ?, 'kiosk', ?)
+      INSERT INTO subscribers (uuid, name, source, created_at) VALUES (?, ?, ?, ?)
       ON CONFLICT (uuid) DO UPDATE SET active = 1, name = EXCLUDED.name
-    `, [u, typeof name === 'string' && name ? name : u, db.now()]);
+    `, [u, typeof name === 'string' && name ? name : u, src, db.now()]);
     // Optional list choice made at the kiosk's subscribe dialog.
     const listName = String((req.body && req.body.list) || '').trim();
     if (listName) {
@@ -230,6 +232,50 @@ router.get('/latest', wrap(async (req, res) => {
   }
   await touchKiosk();
   res.json({ latest: pkg });
+}));
+
+// ---------- satellite kiosks (signup points, no delivery duties) ----------
+
+// Registration + heartbeat for a satellite. Response tells it the current
+// list names (for its subscribe picker) and whether its pinned list exists.
+router.post('/sat-hello', wrap(async (req, res) => {
+  const { key, label, region, list } = req.body || {};
+  if (typeof key !== 'string' || !UUID_RE.test(key)) {
+    return res.status(400).json({ error: 'bad object key' });
+  }
+  const lbl = String(label || 'Satellite').slice(0, 24);
+  await db.run(`
+    INSERT INTO satellites (object_key, label, region, list_name, last_seen)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (object_key) DO UPDATE SET
+      label = EXCLUDED.label, region = EXCLUDED.region,
+      list_name = EXCLUDED.list_name, last_seen = EXCLUDED.last_seen
+  `, [key.toLowerCase(), lbl, String(region || '').slice(0, 64),
+    String(list || '').slice(0, 20), db.now()]);
+  const listNames = (await db.all('SELECT name FROM lists ORDER BY LOWER(name)')).map(r => r.name);
+  let listOk = true;
+  if (list) {
+    listOk = !!(await db.get('SELECT id FROM lists WHERE LOWER(name) = LOWER(?)', [String(list)]));
+  }
+  res.json({ listNames, listOk });
+}));
+
+// "Get Latest" at a satellite: the satellite holds no items, so the request
+// is queued as a normal delivery and the PRIMARY kiosk sends it cross-region.
+router.post('/request-latest', wrap(async (req, res) => {
+  const uuid = String((req.body && req.body.uuid) || '').toLowerCase();
+  if (!UUID_RE.test(uuid)) return res.status(400).json({ error: 'bad uuid' });
+  const pkg = await latestPackage();
+  if (!pkg) return res.json({ ok: false });
+  // Shadow-banned avatars get the same plausible "nothing available".
+  const sub = await db.get('SELECT shadowbanned FROM subscribers WHERE uuid = ?', [uuid]);
+  if (sub && sub.shadowbanned) return res.json({ ok: false });
+  await db.run(`
+    INSERT INTO deliveries (package_id, uuid, status, queued_at)
+    VALUES (?, ?, 'queued', ?)
+  `, [pkg.id, uuid, db.now()]);
+  await pingKiosk();
+  res.json({ ok: true, name: pkg.name });
 }));
 
 module.exports = { router, pingKiosk, kioskOnline, kioskRow, UUID_RE, wrap, fireDueSchedules };

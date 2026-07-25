@@ -50,12 +50,17 @@ router.get('/overview', wrap(async (req, res) => {
     GROUP BY p.id, p.name
     HAVING SUM(CASE WHEN d.status IN ('queued','inflight') THEN 1 ELSE 0 END) > 0
   `);
+  const satellites = (await db.all('SELECT * FROM satellites ORDER BY label')).map(s => ({
+    label: s.label, region: s.region, list: s.list_name, lastSeen: s.last_seen,
+    online: Date.now() - Date.parse(s.last_seen) < config.kioskOfflineMs,
+  }));
   res.json({
     subscribers: (await db.get('SELECT COUNT(*) AS n FROM subscribers WHERE active = 1')).n,
     inactive: (await db.get('SELECT COUNT(*) AS n FROM subscribers WHERE active = 0')).n,
     packages: (await db.get('SELECT COUNT(*) AS n FROM packages')).n,
     kioskOnline: await kioskOnline(),
     kioskLastSeen: k ? k.last_seen : null,
+    satellites,
     pendingLookups: await db.all(
       "SELECT id, kind, query FROM lookups WHERE status = 'pending' ORDER BY id"),
     sending,

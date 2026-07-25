@@ -54,6 +54,12 @@ function schemaSql(kind) {
       last_seen TEXT,
       inventory TEXT NOT NULL DEFAULT '[]')`,
     `INSERT INTO kiosk (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+    `CREATE TABLE IF NOT EXISTS satellites (
+      object_key TEXT PRIMARY KEY,
+      label      TEXT NOT NULL,
+      region     TEXT NOT NULL DEFAULT '',
+      list_name  TEXT NOT NULL DEFAULT '',
+      last_seen  TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS login_attempts (
       ip    TEXT PRIMARY KEY,
       count INTEGER NOT NULL,

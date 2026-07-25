@@ -98,6 +98,19 @@ Open the dashboard, log in, and:
   itself), so scheduling works on every deployment including Vercel's free
   tier — expect delivery to start within ~5 minutes of the programmed time.
 
+### Satellite kiosks (signup points anywhere on the grid)
+
+Rez [kiosk/sinful-satellite.lsl](kiosk/sinful-satellite.lsl) in a prim
+anywhere — other parcels, other sims. Satellites offer Subscribe /
+Unsubscribe / Get Latest only; run exactly ONE primary kiosk (it does all
+deliveries). Configure each satellite's `LABEL` (signups show it as their
+source in the dashboard) and optionally pin `LIST_NAME` so subscribing
+there auto-joins that list (e.g. a "Beach Events" board at the beach —
+leave `""` for the normal list picker). "Get Latest" at a satellite is
+relayed: the primary kiosk delivers the package cross-region within
+moments. The dashboard pill shows satellite status ("kiosk online · 2/2
+sat"; hover for details per satellite).
+
 ### Invitation HUDs (the intended workflow for events)
 
 Instead of sending loose items, send **one invitation object** that

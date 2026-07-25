@@ -122,8 +122,13 @@ async function loadOverview() {
   const pill = $('#kiosk-pill');
   pill.classList.toggle('pill-on', kioskOnline);
   pill.classList.toggle('pill-off', !kioskOnline);
-  $('#kiosk-pill-text').textContent = kioskOnline ? 'kiosk online' : 'kiosk offline';
-  pill.title = kioskLastSeen ? `Last seen (UTC): ${kioskLastSeen}` : 'Kiosk has never connected';
+  const satellites = state.overview.satellites || [];
+  const satsUp = satellites.filter(s => s.online).length;
+  $('#kiosk-pill-text').textContent = (kioskOnline ? 'kiosk online' : 'kiosk offline')
+    + (satellites.length ? ` · ${satsUp}/${satellites.length} sat` : '');
+  pill.title = (kioskLastSeen ? `Primary last seen (UTC): ${kioskLastSeen}` : 'Kiosk has never connected')
+    + satellites.map(s => `\n${s.online ? '🟢' : '🔴'} ${s.label} — ${s.region || '?'}`
+      + (s.list ? ` → list "${s.list}"` : '')).join('');
   $('#sub-count').textContent = subscribers;
   renderPendingLookups(pendingLookups);
 }
