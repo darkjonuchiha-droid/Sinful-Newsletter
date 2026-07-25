@@ -357,6 +357,17 @@ textarea { resize: vertical; width: 100%; }
   padding: .08rem .45rem; margin-right: .25rem;
   white-space: nowrap;
 }
+.bulk-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .45rem;
+  background: var(--panel2);
+  border: 1px solid var(--rose);
+  border-radius: 10px;
+  padding: .5rem .85rem;
+  margin-bottom: .8rem;
+  font-size: .86rem;
+}
+.bulk-bar span { font-weight: 700; color: var(--rose); margin-right: .4rem; }
+.sub-table input[type="checkbox"] { accent-color: var(--rose); cursor: pointer; }
 .member-checks { display: grid; gap: .4rem; margin-bottom: .4rem; }
 .member-checks label {
   display: flex; align-items: center; gap: .55rem;

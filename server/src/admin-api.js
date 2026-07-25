@@ -180,6 +180,48 @@ router.post('/subscribers', wrap(async (req, res) => {
   res.json({ ok: true, note: 'looking up name via kiosk — appears in the list once resolved' });
 }));
 
+// Bulk operations on a set of subscribers.
+router.post('/subscribers/bulk', wrap(async (req, res) => {
+  const action = String((req.body && req.body.action) || '');
+  let uuids = (req.body && req.body.uuids) || [];
+  if (!Array.isArray(uuids)) return res.status(400).json({ error: 'uuids must be an array' });
+  uuids = uuids.filter(u => typeof u === 'string' && UUID_RE.test(u))
+    .map(u => u.toLowerCase()).slice(0, 500);
+  if (!uuids.length) return res.status(400).json({ error: 'no valid subscribers selected' });
+  const ph = uuids.map(() => '?').join(',');
+
+  if (action === 'activate' || action === 'deactivate') {
+    const r = await db.run(
+      `UPDATE subscribers SET active = ? WHERE uuid IN (${ph})`,
+      [action === 'activate' ? 1 : 0, ...uuids]);
+    return res.json({ ok: true, affected: r.changes });
+  }
+  if (action === 'delete') {
+    const r = await db.run(`DELETE FROM subscribers WHERE uuid IN (${ph})`, uuids);
+    return res.json({ ok: true, affected: r.changes });
+  }
+  if (action === 'addlist' || action === 'removelist') {
+    const listId = Number(req.body.list_id) || 0;
+    if (!await db.get('SELECT id FROM lists WHERE id = ?', [listId])) {
+      return res.status(404).json({ error: 'no such list' });
+    }
+    let r;
+    if (action === 'addlist') {
+      r = await db.run(`
+        INSERT INTO list_members (list_id, uuid)
+        SELECT ?, uuid FROM subscribers WHERE uuid IN (${ph})
+        ON CONFLICT (list_id, uuid) DO NOTHING
+      `, [listId, ...uuids]);
+    } else {
+      r = await db.run(
+        `DELETE FROM list_members WHERE list_id = ? AND uuid IN (${ph})`,
+        [listId, ...uuids]);
+    }
+    return res.json({ ok: true, affected: r.changes });
+  }
+  res.status(400).json({ error: 'unknown action' });
+}));
+
 router.patch('/subscribers/:uuid', wrap(async (req, res) => {
   const active = req.body && req.body.active ? 1 : 0;
   const r = await db.run('UPDATE subscribers SET active = ? WHERE uuid = ?',

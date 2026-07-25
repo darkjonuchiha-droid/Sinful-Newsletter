@@ -70,9 +70,21 @@
       <input id="sub-search" type="search" placeholder="Search…">
     </div>
     <div id="pending-lookups" class="pending-lookups hidden"></div>
+    <div id="bulk-bar" class="bulk-bar hidden">
+      <span id="bulk-count"></span>
+      <button class="btn btn-primary btn-mini" data-bulk="addlist">Add to list…</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="removelist">Remove from list…</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="activate">Activate</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="deactivate">Deactivate</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="delete">Delete</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="clear">Clear selection</button>
+    </div>
     <div class="table-wrap">
       <table class="sub-table">
-        <thead><tr><th>Name</th><th>UUID</th><th>Lists</th><th>Source</th><th>Active</th><th></th></tr></thead>
+        <thead><tr>
+          <th><input id="sel-all" type="checkbox" title="Select all shown"></th>
+          <th>Name</th><th>UUID</th><th>Lists</th><th>Source</th><th>Active</th><th></th>
+        </tr></thead>
         <tbody id="sub-rows"></tbody>
       </table>
     </div>
@@ -106,6 +118,18 @@
     <div id="member-checks" class="member-checks"></div>
     <div class="editor-actions">
       <button id="btn-member-close" class="btn btn-primary">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= BULK LIST MODAL ======================= -->
+<div id="bulklist-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="bulklist-title"></p>
+    <select id="bulklist-select"></select>
+    <div class="editor-actions">
+      <button id="btn-bulklist-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="btn-bulklist-go" class="btn btn-primary">Apply</button>
     </div>
   </div>
 </div>

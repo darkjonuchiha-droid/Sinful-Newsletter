@@ -12,6 +12,7 @@ const state = {
   lists: [],
   filterList: 0,      // 0 = all subscribers
   memberSub: null,    // subscriber shown in the membership modal
+  selected: new Set(), // uuids ticked for bulk actions
   kiosk: { online: false, inventory: [] },
   overview: null,
   editing: null,      // null | {id?} package being edited
@@ -305,8 +306,12 @@ async function loadSubscribers() {
 }
 
 function renderSubscribers() {
+  // Drop selections that are no longer visible (filter/search changed).
+  const visible = new Set(state.subscribers.map(s => s.uuid));
+  for (const u of state.selected) if (!visible.has(u)) state.selected.delete(u);
   $('#sub-rows').innerHTML = state.subscribers.map(s => `
     <tr class="${s.active ? '' : 'inactive-row'}" data-uuid="${s.uuid}">
+      <td><input type="checkbox" class="row-sel" ${state.selected.has(s.uuid) ? 'checked' : ''}></td>
       <td>${esc(s.name)}</td>
       <td class="mono" title="${s.uuid}">${s.uuid}</td>
       <td>
@@ -321,6 +326,15 @@ function renderSubscribers() {
       </td>
       <td><button class="btn btn-ghost btn-mini" data-act="remove">Remove</button></td>
     </tr>`).join('');
+  renderBulkBar();
+}
+
+function renderBulkBar() {
+  const n = state.selected.size;
+  $('#bulk-bar').classList.toggle('hidden', n === 0);
+  $('#bulk-count').textContent = `${n} selected`;
+  const all = state.subscribers.length > 0 && n === state.subscribers.length;
+  $('#sel-all').checked = all;
 }
 
 $('#sub-rows').addEventListener('click', async (e) => {
@@ -351,6 +365,81 @@ $('#sub-rows').addEventListener('change', async (e) => {
     loadSubscribers();
     loadOverview();
   } catch (err) { toast(err.message, 'err'); }
+});
+
+// -- bulk selection & actions --
+
+$('#sub-rows').addEventListener('change', (e) => {
+  const cb = e.target.closest('input.row-sel');
+  if (!cb) return;
+  const uuid = cb.closest('tr').dataset.uuid;
+  if (cb.checked) state.selected.add(uuid);
+  else state.selected.delete(uuid);
+  renderBulkBar();
+});
+
+$('#sel-all').addEventListener('change', () => {
+  if ($('#sel-all').checked) {
+    for (const s of state.subscribers) state.selected.add(s.uuid);
+  } else {
+    state.selected.clear();
+  }
+  renderSubscribers();
+});
+
+async function runBulk(action, listId, label) {
+  try {
+    const r = await api('/subscribers/bulk', {
+      method: 'POST',
+      body: { action, uuids: [...state.selected], list_id: listId },
+    });
+    toast(`${label}: ${r.affected} subscriber(s)`, 'ok');
+    state.selected.clear();
+    loadSubscribers();
+    loadLists();
+    loadOverview();
+  } catch (err) { toast(err.message, 'err'); }
+}
+
+let bulkListMode = null; // 'addlist' | 'removelist'
+
+$('#bulk-bar').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-bulk]');
+  if (!btn) return;
+  const act = btn.dataset.bulk;
+  const n = state.selected.size;
+  if (act === 'clear') {
+    state.selected.clear();
+    return renderSubscribers();
+  }
+  if (act === 'activate') return runBulk('activate', 0, 'Activated');
+  if (act === 'deactivate') return runBulk('deactivate', 0, 'Deactivated');
+  if (act === 'delete') {
+    if (!await confirmModal(`Permanently remove ${n} subscriber(s)? (Deactivate instead if you just want to pause them.)`)) return;
+    return runBulk('delete', 0, 'Removed');
+  }
+  if (act === 'addlist' || act === 'removelist') {
+    if (!state.lists.length) return toast('Create a list first (the "+ New list" chip)', 'err');
+    bulkListMode = act;
+    $('#bulklist-title').textContent = act === 'addlist'
+      ? `Add ${n} subscriber(s) to which list?`
+      : `Remove ${n} subscriber(s) from which list?`;
+    fillListSelect($('#bulklist-select'), false);
+    $('#bulklist-overlay').classList.remove('hidden');
+  }
+});
+
+$('#btn-bulklist-cancel').addEventListener('click', () =>
+  $('#bulklist-overlay').classList.add('hidden'));
+
+$('#btn-bulklist-go').addEventListener('click', () => {
+  $('#bulklist-overlay').classList.add('hidden');
+  const listId = Number($('#bulklist-select').value);
+  if (!listId || !bulkListMode) return;
+  const l = state.lists.find(x => x.id === listId);
+  runBulk(bulkListMode, listId,
+    bulkListMode === 'addlist' ? `Added to “${l.name}”` : `Removed from “${l.name}”`);
+  bulkListMode = null;
 });
 
 $('#btn-sub-add').addEventListener('click', addSubscriber);
