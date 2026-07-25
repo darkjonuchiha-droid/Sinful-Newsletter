@@ -62,22 +62,86 @@ router.get('/overview', wrap(async (req, res) => {
   });
 }));
 
+// ---------- lists ----------
+
+// Names double as kiosk dialog buttons (24-byte LSL limit) and must not
+// collide with the kiosk's own button labels.
+const RESERVED_LIST_NAMES = ['everything', 'all', 'subscribe', 'unsubscribe',
+  'get latest', 'sync', 'status', 'close'];
+
+router.get('/lists', wrap(async (req, res) => {
+  const rows = await db.all(`
+    SELECT l.id, l.name, COUNT(m.uuid) AS members
+    FROM lists l LEFT JOIN list_members m ON m.list_id = l.id
+    GROUP BY l.id, l.name ORDER BY LOWER(l.name)
+  `);
+  res.json({ lists: rows });
+}));
+
+router.post('/lists', wrap(async (req, res) => {
+  const name = String((req.body && req.body.name) || '').trim();
+  if (!name || name.length > 20) {
+    return res.status(400).json({ error: 'list name required, max 20 characters (kiosk button limit)' });
+  }
+  if (RESERVED_LIST_NAMES.includes(name.toLowerCase())) {
+    return res.status(400).json({ error: `"${name}" is reserved — pick another name` });
+  }
+  const dupe = await db.get('SELECT id FROM lists WHERE LOWER(name) = LOWER(?)', [name]);
+  if (dupe) return res.status(400).json({ error: 'a list with that name already exists' });
+  const id = await db.insert('INSERT INTO lists (name, created_at) VALUES (?, ?)', [name, db.now()]);
+  res.json({ ok: true, id });
+}));
+
+router.delete('/lists/:id', wrap(async (req, res) => {
+  const r = await db.run('DELETE FROM lists WHERE id = ?', [Number(req.params.id)]);
+  if (!r.changes) return res.status(404).json({ error: 'no such list' });
+  res.json({ ok: true });
+}));
+
+router.post('/lists/:id/members', wrap(async (req, res) => {
+  const listId = Number(req.params.id);
+  const uuid = String((req.body && req.body.uuid) || '').toLowerCase();
+  if (!await db.get('SELECT id FROM lists WHERE id = ?', [listId])) {
+    return res.status(404).json({ error: 'no such list' });
+  }
+  if (!await db.get('SELECT uuid FROM subscribers WHERE uuid = ?', [uuid])) {
+    return res.status(404).json({ error: 'no such subscriber' });
+  }
+  await db.run('INSERT INTO list_members (list_id, uuid) VALUES (?, ?) ON CONFLICT (list_id, uuid) DO NOTHING',
+    [listId, uuid]);
+  res.json({ ok: true });
+}));
+
+router.delete('/lists/:id/members/:uuid', wrap(async (req, res) => {
+  await db.run('DELETE FROM list_members WHERE list_id = ? AND uuid = ?',
+    [Number(req.params.id), String(req.params.uuid).toLowerCase()]);
+  res.json({ ok: true });
+}));
+
 // ---------- subscribers ----------
 
 router.get('/subscribers', wrap(async (req, res) => {
   const q = String(req.query.q || '').trim();
-  let rows;
+  const listId = Number(req.query.list) || 0;
+  let sql = 'SELECT s.* FROM subscribers s';
+  const params = [];
+  if (listId) {
+    sql += ' JOIN list_members m ON m.uuid = s.uuid AND m.list_id = ?';
+    params.push(listId);
+  }
   if (q) {
     const like = `%${q.toLowerCase()}%`;
-    rows = await db.all(`
-      SELECT * FROM subscribers
-      WHERE LOWER(name) LIKE ? OR LOWER(uuid) LIKE ?
-      ORDER BY LOWER(name) LIMIT 500
-    `, [like, like]);
-  } else {
-    rows = await db.all('SELECT * FROM subscribers ORDER BY LOWER(name) LIMIT 500');
+    sql += ' WHERE LOWER(s.name) LIKE ? OR LOWER(s.uuid) LIKE ?';
+    params.push(like, like);
   }
-  res.json({ subscribers: rows });
+  sql += ' ORDER BY LOWER(s.name) LIMIT 500';
+  const rows = await db.all(sql, params);
+  // Attach each subscriber's list memberships (portable: assembled in JS).
+  const mem = await db.all(
+    'SELECT m.uuid, l.id, l.name FROM list_members m JOIN lists l ON l.id = m.list_id');
+  const byUuid = {};
+  for (const m of mem) (byUuid[m.uuid] = byUuid[m.uuid] || []).push({ id: m.id, name: m.name });
+  res.json({ subscribers: rows.map(r => ({ ...r, lists: byUuid[r.uuid] || [] })) });
 }));
 
 // Add by UUID or by legacy name (name resolution is delegated to the kiosk).
@@ -188,15 +252,29 @@ router.delete('/packages/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// Send to every active subscriber.
+// Send to every active subscriber, or to one list via body.list_id.
 router.post('/packages/:id/send', wrap(async (req, res) => {
   const id = Number(req.params.id);
   const pkg = await db.get('SELECT id FROM packages WHERE id = ?', [id]);
   if (!pkg) return res.status(404).json({ error: 'no such package' });
-  const r = await db.run(`
-    INSERT INTO deliveries (package_id, uuid, status, queued_at)
-    SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1
-  `, [id, db.now()]);
+  const listId = Number(req.body && req.body.list_id) || 0;
+  let r;
+  if (listId) {
+    if (!await db.get('SELECT id FROM lists WHERE id = ?', [listId])) {
+      return res.status(404).json({ error: 'no such list' });
+    }
+    r = await db.run(`
+      INSERT INTO deliveries (package_id, uuid, status, queued_at)
+      SELECT ?, s.uuid, 'queued', ? FROM subscribers s
+      JOIN list_members m ON m.uuid = s.uuid AND m.list_id = ?
+      WHERE s.active = 1
+    `, [id, db.now(), listId]);
+  } else {
+    r = await db.run(`
+      INSERT INTO deliveries (package_id, uuid, status, queued_at)
+      SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1
+    `, [id, db.now()]);
+  }
   await pingKiosk();
   res.json({ ok: true, queued: r.changes, kioskOnline: await kioskOnline() });
 }));
@@ -235,17 +313,22 @@ router.post('/packages/:id/schedule', wrap(async (req, res) => {
   if (t.getTime() < Date.now() - 60000) {
     return res.status(400).json({ error: 'that time is in the past' });
   }
+  const listId = Number(req.body && req.body.list_id) || 0;
+  if (listId && !await db.get('SELECT id FROM lists WHERE id = ?', [listId])) {
+    return res.status(404).json({ error: 'no such list' });
+  }
   const sid = await db.insert(
-    "INSERT INTO schedules (package_id, send_at, status, created_at) VALUES (?, ?, 'pending', ?)",
-    [id, t.toISOString(), db.now()]);
+    "INSERT INTO schedules (package_id, send_at, status, created_at, list_id) VALUES (?, ?, 'pending', ?, ?)",
+    [id, t.toISOString(), db.now(), listId || null]);
   res.json({ ok: true, id: sid });
 }));
 
 // All schedules (pending + history) with package names, newest-relevant first.
 router.get('/schedules', wrap(async (req, res) => {
   const rows = await db.all(`
-    SELECT s.id, s.package_id, s.send_at, s.status, s.fired_at, p.name
+    SELECT s.id, s.package_id, s.send_at, s.status, s.fired_at, p.name, l.name AS list_name
     FROM schedules s JOIN packages p ON p.id = s.package_id
+    LEFT JOIN lists l ON l.id = s.list_id
     ORDER BY s.send_at DESC LIMIT 300
   `);
   res.json({ schedules: rows });

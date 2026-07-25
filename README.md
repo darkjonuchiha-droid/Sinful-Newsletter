@@ -81,6 +81,14 @@ Open the dashboard, log in, and:
   UUID/name — perfect for people who joined late.
 - Residents touch the kiosk to **Subscribe / Unsubscribe / Get Latest**
   (self-service redelivery of the newest package).
+- **Lists** (audience segments): create them on the Subscribers tab
+  (`+ New list` chip, names ≤ 20 chars — they double as kiosk dialog
+  buttons). Filter the table by list, and edit any subscriber's
+  memberships via the `…` button in their row. Packages then offer
+  **Send to list…** next to Send to all, and scheduling lets you pick
+  All subscribers or a list. When lists exist, the kiosk's Subscribe
+  dialog asks new subscribers which newsletter they want ("Everything"
+  or a specific list).
 - **Program sends ahead of time**: each package card has *Schedule…* — pick
   a date and time (shown in your local time **and SLT**), e.g. compose the
   newsletter on Tuesday, program delivery for Thursday 8pm. Programmed sends

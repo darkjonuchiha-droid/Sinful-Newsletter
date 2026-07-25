@@ -336,6 +336,44 @@ textarea { resize: vertical; width: 100%; }
 #schedule-dt { width: 100%; color-scheme: dark; margin-bottom: .35rem; }
 @media (max-width: 640px) { .cal-cell { min-height: 64px; } }
 
+/* ---------- lists ---------- */
+.list-chips { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; margin-bottom: .9rem; }
+.list-chip {
+  font: inherit; font-size: .82rem; font-weight: 700;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: .3rem .85rem;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.list-chip:hover { color: var(--text); }
+.list-chip.active { color: var(--rose); border-color: var(--rose); background: var(--rose-soft); }
+.list-chip .n { color: var(--gold); font-weight: 400; margin-left: .3rem; }
+.sub-list-tag {
+  font-size: .7rem; color: var(--gold);
+  border: 1px solid #d9a44133; border-radius: 999px;
+  padding: .08rem .45rem; margin-right: .25rem;
+  white-space: nowrap;
+}
+.member-checks { display: grid; gap: .4rem; margin-bottom: .4rem; }
+.member-checks label {
+  display: flex; align-items: center; gap: .55rem;
+  background: var(--bg0); border: 1px solid var(--line);
+  border-radius: 9px; padding: .5rem .7rem; cursor: pointer;
+}
+.member-checks input { accent-color: var(--rose); }
+select {
+  font: inherit; color: var(--text);
+  background: var(--bg0);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: .55rem .7rem;
+  width: 100%;
+  margin-bottom: .4rem;
+}
+
 /* ---------- delivery log ---------- */
 .st-sent { color: var(--ok); }
 .st-pending { color: var(--gold); }

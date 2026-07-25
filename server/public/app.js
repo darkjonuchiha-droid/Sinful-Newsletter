@@ -9,6 +9,9 @@ const state = {
   packages: [],
   subscribers: [],
   schedules: [],
+  lists: [],
+  filterList: 0,      // 0 = all subscribers
+  memberSub: null,    // subscriber shown in the membership modal
   kiosk: { online: false, inventory: [] },
   overview: null,
   editing: null,      // null | {id?} package being edited
@@ -71,7 +74,8 @@ async function showApp() {
 }
 
 async function refreshAll() {
-  await Promise.all([loadOverview(), loadPackages(), loadSubscribers(), loadKiosk(), loadSchedules()]);
+  await Promise.all([loadOverview(), loadPackages(), loadSubscribers(), loadKiosk(),
+    loadSchedules(), loadLists()]);
 }
 
 async function pollTick() {
@@ -150,6 +154,7 @@ function renderPackages() {
           </div>
           <div class="pkg-actions">
             <button class="btn btn-primary btn-mini" data-act="send">Send to all</button>
+            <button class="btn btn-ghost btn-mini" data-act="sendlist">Send to list…</button>
             <button class="btn btn-ghost btn-mini" data-act="schedule">Schedule…</button>
             <button class="btn btn-ghost btn-mini" data-act="test">Send to one…</button>
             <button class="btn btn-ghost btn-mini" data-act="log">Log</button>
@@ -171,6 +176,7 @@ $('#package-list').addEventListener('click', async (e) => {
 
   if (act === 'edit') return openEditor(pkg);
   if (act === 'schedule') return openSchedule(pkg);
+  if (act === 'sendlist') return openSendList(pkg);
   if (act === 'log') return openLog(pkg);
 
   if (act === 'delete') {
@@ -289,7 +295,11 @@ $('#btn-new-package').addEventListener('click', async () => {
 
 async function loadSubscribers() {
   const q = $('#sub-search').value.trim();
-  const data = await api('/subscribers' + (q ? `?q=${encodeURIComponent(q)}` : ''));
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (state.filterList) params.set('list', state.filterList);
+  const qs = params.toString();
+  const data = await api('/subscribers' + (qs ? `?${qs}` : ''));
   state.subscribers = data.subscribers;
   renderSubscribers();
 }
@@ -299,6 +309,10 @@ function renderSubscribers() {
     <tr class="${s.active ? '' : 'inactive-row'}" data-uuid="${s.uuid}">
       <td>${esc(s.name)}</td>
       <td class="mono" title="${s.uuid}">${s.uuid}</td>
+      <td>
+        ${(s.lists || []).map(l => `<span class="sub-list-tag">${esc(l.name)}</span>`).join('')}
+        <button class="btn btn-ghost btn-mini" data-act="lists" title="Edit list memberships">…</button>
+      </td>
       <td><span class="src-tag">${esc(s.source)}</span></td>
       <td>
         <label class="toggle" title="${s.active ? 'Active — receives sends' : 'Inactive — skipped on sends'}">
@@ -315,12 +329,16 @@ $('#sub-rows').addEventListener('click', async (e) => {
   const uuid = row.dataset.uuid;
   const sub = state.subscribers.find(s => s.uuid === uuid);
 
+  if (e.target.closest('button[data-act=lists]')) {
+    return openMemberModal(sub);
+  }
   if (e.target.closest('button[data-act=remove]')) {
     if (!await confirmModal(`Remove ${sub ? sub.name : uuid} permanently? (Use the Active toggle to pause instead.)`)) return;
     await api(`/subscribers/${uuid}`, { method: 'DELETE' });
     toast('Subscriber removed', 'ok');
     loadSubscribers();
     loadOverview();
+    loadLists();
   }
 });
 
@@ -365,6 +383,139 @@ async function loadKiosk() {
   state.kiosk = await api('/kiosk-status');
 }
 
+// ---------------- lists ----------------
+
+async function loadLists() {
+  state.lists = (await api('/lists')).lists;
+  renderListChips();
+}
+
+function renderListChips() {
+  const wrap = $('#list-chips');
+  const chips = [
+    `<button class="list-chip ${state.filterList === 0 ? 'active' : ''}" data-list="0">All subscribers</button>`,
+  ].concat(state.lists.map(l =>
+    `<button class="list-chip ${state.filterList === l.id ? 'active' : ''}" data-list="${l.id}">
+       ${esc(l.name)}<span class="n">${l.members}</span>
+     </button>`));
+  chips.push('<button class="list-chip" data-newlist="1">+ New list</button>');
+  if (state.filterList) {
+    chips.push(`<button class="btn btn-ghost btn-mini" data-dellist="${state.filterList}">Delete this list</button>`);
+  }
+  wrap.innerHTML = chips.join('');
+}
+
+$('#list-chips').addEventListener('click', async (e) => {
+  const del = e.target.closest('[data-dellist]');
+  if (del) {
+    const l = state.lists.find(x => x.id === Number(del.dataset.dellist));
+    if (!l) return;
+    if (!await confirmModal(`Delete the list “${l.name}”? Subscribers themselves are kept — only the grouping is removed.`)) return;
+    await api(`/lists/${l.id}`, { method: 'DELETE' });
+    state.filterList = 0;
+    toast('List deleted', 'ok');
+    await loadLists();
+    return loadSubscribers();
+  }
+  if (e.target.closest('[data-newlist]')) {
+    const name = prompt('Name for the new list (max 20 characters):');
+    if (!name || !name.trim()) return;
+    try {
+      await api('/lists', { method: 'POST', body: { name: name.trim() } });
+      toast('List created', 'ok');
+      loadLists();
+    } catch (err) { toast(err.message, 'err'); }
+    return;
+  }
+  const chip = e.target.closest('[data-list]');
+  if (chip) {
+    state.filterList = Number(chip.dataset.list);
+    renderListChips();
+    loadSubscribers();
+  }
+});
+
+// -- membership modal --
+
+function openMemberModal(sub) {
+  if (!sub) return;
+  if (!state.lists.length) {
+    return toast('Create a list first (the "+ New list" chip above the table)', 'err');
+  }
+  state.memberSub = sub;
+  $('#member-title').textContent = `Lists for ${sub.name}:`;
+  const memberOf = new Set((sub.lists || []).map(l => l.id));
+  $('#member-checks').innerHTML = state.lists.map(l => `
+    <label><input type="checkbox" data-list-id="${l.id}" ${memberOf.has(l.id) ? 'checked' : ''}>
+      ${esc(l.name)}</label>`).join('');
+  $('#member-overlay').classList.remove('hidden');
+}
+
+$('#member-checks').addEventListener('change', async (e) => {
+  const cb = e.target.closest('input[data-list-id]');
+  if (!cb || !state.memberSub) return;
+  const listId = Number(cb.dataset.listId);
+  try {
+    if (cb.checked) {
+      await api(`/lists/${listId}/members`, { method: 'POST', body: { uuid: state.memberSub.uuid } });
+    } else {
+      await api(`/lists/${listId}/members/${state.memberSub.uuid}`, { method: 'DELETE' });
+    }
+  } catch (err) {
+    toast(err.message, 'err');
+    cb.checked = !cb.checked;
+  }
+});
+
+$('#btn-member-close').addEventListener('click', () => {
+  state.memberSub = null;
+  $('#member-overlay').classList.add('hidden');
+  loadLists();
+  loadSubscribers();
+});
+
+// -- send to list modal --
+
+let sendListPkg = null;
+
+function fillListSelect(sel, includeAll) {
+  const opts = [];
+  if (includeAll) opts.push('<option value="0">All subscribers</option>');
+  for (const l of state.lists) {
+    opts.push(`<option value="${l.id}">${esc(l.name)} (${l.members})</option>`);
+  }
+  sel.innerHTML = opts.join('');
+}
+
+function openSendList(pkg) {
+  if (!state.lists.length) {
+    return toast('No lists yet — create one on the Subscribers tab first', 'err');
+  }
+  sendListPkg = pkg;
+  $('#sendlist-title').textContent = `Send “${pkg.name}” to which list?`;
+  fillListSelect($('#sendlist-select'), false);
+  $('#sendlist-overlay').classList.remove('hidden');
+}
+
+$('#btn-sendlist-cancel').addEventListener('click', () =>
+  $('#sendlist-overlay').classList.add('hidden'));
+
+$('#btn-sendlist-go').addEventListener('click', async () => {
+  if (!sendListPkg) return;
+  const listId = Number($('#sendlist-select').value);
+  const l = state.lists.find(x => x.id === listId);
+  $('#sendlist-overlay').classList.add('hidden');
+  if (!l) return;
+  if (!await confirmModal(`Send “${sendListPkg.name}” to the ${l.members} member(s) of “${l.name}” now?`)) return;
+  try {
+    const r = await api(`/packages/${sendListPkg.id}/send`, {
+      method: 'POST', body: { list_id: listId },
+    });
+    toast(`Queued ${r.queued} deliveries to “${l.name}”`, 'ok');
+    loadPackages();
+  } catch (err) { toast(err.message, 'err'); }
+});
+
 // ---------------- schedules ----------------
 
 async function loadSchedules() {
@@ -382,7 +533,7 @@ function renderUpcoming() {
   wrap.innerHTML = pending.map(s => `
     <div class="upcoming-item" data-sid="${s.id}">
       <span>📅</span>
-      <span><b>${esc(s.name)}</b></span>
+      <span><b>${esc(s.name)}</b>${s.list_name ? ' → ' + esc(s.list_name) : ''}</span>
       <span class="when">${esc(fmtLocal(s.send_at))} (${esc(fmtSLT(s.send_at))} SLT)</span>
       <button class="btn btn-ghost btn-mini" data-act="cancel-schedule">Cancel</button>
     </div>`).join('');
@@ -470,6 +621,7 @@ function openSchedule(pkg) {
   $('#schedule-dt').value =
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   updateSltHint();
+  fillListSelect($('#schedule-list'), true);
   $('#schedule-overlay').classList.remove('hidden');
 }
 
@@ -486,7 +638,10 @@ $('#btn-schedule-save').addEventListener('click', async () => {
   if (!v || isNaN(new Date(v))) return toast('Pick a valid date and time', 'err');
   try {
     await api(`/packages/${state.scheduling}/schedule`, {
-      method: 'POST', body: { send_at: new Date(v).toISOString() },
+      method: 'POST', body: {
+        send_at: new Date(v).toISOString(),
+        list_id: Number($('#schedule-list').value) || 0,
+      },
     });
     $('#schedule-overlay').classList.add('hidden');
     toast('Send programmed', 'ok');
@@ -534,7 +689,8 @@ function renderCalendar() {
         const title = s.status === 'pending'
           ? `Programmed: ${fmtLocal(s.send_at)} (${fmtSLT(s.send_at)} SLT) — tap to cancel`
           : `Sent ${fmtLocal(s.fired_at || s.send_at)}`;
-        return `<span class="cal-chip ${cls}" data-sid="${s.id}" title="${esc(title)}">${hm} ${esc(s.name)}</span>`;
+        const label = s.list_name ? `${s.name} → ${s.list_name}` : s.name;
+        return `<span class="cal-chip ${cls}" data-sid="${s.id}" title="${esc(title)}">${hm} ${esc(label)}</span>`;
       }).join('');
     html += `<div class="cal-cell ${isToday(d) ? 'today' : ''}"><span class="cal-day">${d}</span>${chips}</div>`;
   }

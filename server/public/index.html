@@ -63,6 +63,7 @@
         <p class="hint">Add by UUID or legacy name — names are resolved by the in-world kiosk.</p>
       </div>
     </div>
+    <div id="list-chips" class="list-chips"></div>
     <div class="sub-toolbar">
       <input id="sub-add-input" type="text" placeholder='UUID or legacy name, e.g. "Lelouch Resident"'>
       <button id="btn-sub-add" class="btn btn-primary">Add</button>
@@ -71,7 +72,7 @@
     <div id="pending-lookups" class="pending-lookups hidden"></div>
     <div class="table-wrap">
       <table class="sub-table">
-        <thead><tr><th>Name</th><th>UUID</th><th>Source</th><th>Active</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>UUID</th><th>Lists</th><th>Source</th><th>Active</th><th></th></tr></thead>
         <tbody id="sub-rows"></tbody>
       </table>
     </div>
@@ -98,6 +99,29 @@
   </main>
 </div>
 
+<!-- ======================= MEMBERSHIP MODAL ======================= -->
+<div id="member-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="member-title"></p>
+    <div id="member-checks" class="member-checks"></div>
+    <div class="editor-actions">
+      <button id="btn-member-close" class="btn btn-primary">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= SEND-TO-LIST MODAL ======================= -->
+<div id="sendlist-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="sendlist-title"></p>
+    <select id="sendlist-select"></select>
+    <div class="editor-actions">
+      <button id="btn-sendlist-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="btn-sendlist-go" class="btn btn-primary">Send</button>
+    </div>
+  </div>
+</div>
+
 <!-- ======================= DELIVERY LOG MODAL ======================= -->
 <div id="log-overlay" class="overlay hidden">
   <div class="editor">
@@ -122,6 +146,7 @@
     <p id="schedule-title"></p>
     <input id="schedule-dt" type="datetime-local">
     <p id="schedule-slt" class="hint"></p>
+    <select id="schedule-list"></select>
     <div class="editor-actions">
       <button id="btn-schedule-cancel" class="btn btn-ghost">Cancel</button>
       <button id="btn-schedule-save" class="btn btn-primary">Schedule</button>

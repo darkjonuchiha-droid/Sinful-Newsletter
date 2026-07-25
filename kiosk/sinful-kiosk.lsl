@@ -176,6 +176,21 @@ deliverSmart(key dest, string pkgJson)
     else deliverRemote(dest, pkgJson);
 }
 
+// ---- subscribing -------------------------------------------
+
+// listName "" = general subscription; otherwise also joins that list.
+subscribe(key id, string name, string listName)
+{
+    list kv = ["type", "sub", "uuid", (string)id, "name", name];
+    if (listName != "") kv += ["list", listName];
+    string ev = llList2Json(JSON_OBJECT, kv);
+    req("POST", "/event", ev, "event", ev);
+    string extra = "";
+    if (listName != "") extra = " (" + listName + " list)";
+    llRegionSayTo(id, 0, "Welcome to " + NEWSLETTER_NAME + extra
+        + "! You'll receive event notices and packages from now on.");
+}
+
 // ---- server conversation -----------------------------------
 
 hello()
@@ -333,6 +348,8 @@ default
             g_lastHello = llGetUnixTime();
             if (llJsonValueType(body, ["latest"]) == JSON_OBJECT)
                 llLinksetDataWrite("latest", llJsonGetValue(body, ["latest"]));
+            if (llJsonValueType(body, ["listNames"]) == JSON_ARRAY)
+                llLinksetDataWrite("lists", llJsonGetValue(body, ["listNames"]));
             flushOutbox();
             if ((integer)llJsonGetValue(body, ["queued"]) > 0
                 || (integer)llJsonGetValue(body, ["lookups"]) > 0) fetchWork();
@@ -417,11 +434,29 @@ default
 
         if (msg == "Subscribe")
         {
-            string ev = llList2Json(JSON_OBJECT,
-                ["type", "sub", "uuid", (string)id, "name", name]);
-            req("POST", "/event", ev, "event", ev);
-            llRegionSayTo(id, 0, "Welcome to " + NEWSLETTER_NAME
-                + "! You'll receive event notices and packages from now on.");
+            string lj = llLinksetDataRead("lists");
+            if (lj == "" || llJsonValueType(lj, [0]) == JSON_INVALID)
+            {
+                subscribe(id, name, ""); // no lists configured
+                return;
+            }
+            // Offer the list choice (server caps names at 20 chars, and
+            // rejects names that collide with our own buttons).
+            list btns = ["Everything"];
+            integer li = 0;
+            while (llJsonValueType(lj, [li]) != JSON_INVALID
+                && llGetListLength(btns) < 12)
+            {
+                btns += llJsonGetValue(lj, [li]);
+                li++;
+            }
+            llDialog(id, NEWSLETTER_NAME
+                + "\n\nWhich newsletter would you like?\n(\"Everything\" = all of them.)",
+                btns, g_dlgChan);
+        }
+        else if (msg == "Everything")
+        {
+            subscribe(id, name, "");
         }
         else if (msg == "Unsubscribe")
         {
@@ -434,6 +469,21 @@ default
         else if (msg == "Get Latest")
         {
             req("GET", "/latest?uuid=" + (string)id, "", "latest", (string)id);
+        }
+        else
+        {
+            // A button matching one of the configured list names?
+            string lj3 = llLinksetDataRead("lists");
+            integer lx = 0;
+            while (llJsonValueType(lj3, [lx]) != JSON_INVALID)
+            {
+                if (llJsonGetValue(lj3, [lx]) == msg)
+                {
+                    subscribe(id, name, msg);
+                    return;
+                }
+                lx++;
+            }
         }
     }
 

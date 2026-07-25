@@ -51,10 +51,20 @@ async function fireDueSchedules() {
     "SELECT * FROM schedules WHERE status = 'pending' AND send_at <= ?", [db.now()]);
   let fired = 0;
   for (const s of due) {
-    const r = await db.run(`
-      INSERT INTO deliveries (package_id, uuid, status, queued_at)
-      SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1
-    `, [s.package_id, db.now()]);
+    let r;
+    if (s.list_id) {
+      r = await db.run(`
+        INSERT INTO deliveries (package_id, uuid, status, queued_at)
+        SELECT ?, sub.uuid, 'queued', ? FROM subscribers sub
+        JOIN list_members m ON m.uuid = sub.uuid AND m.list_id = ?
+        WHERE sub.active = 1
+      `, [s.package_id, db.now(), s.list_id]);
+    } else {
+      r = await db.run(`
+        INSERT INTO deliveries (package_id, uuid, status, queued_at)
+        SELECT ?, uuid, 'queued', ? FROM subscribers WHERE active = 1
+      `, [s.package_id, db.now()]);
+    }
     await db.run("UPDATE schedules SET status = 'sent', fired_at = ? WHERE id = ?",
       [db.now(), s.id]);
     fired += r.changes;
@@ -80,7 +90,8 @@ router.post('/hello', wrap(async (req, res) => {
   await fireDueSchedules(); // before counting, so fresh sends are picked up now
   const queued = (await db.get("SELECT COUNT(*) AS n FROM deliveries WHERE status = 'queued'")).n;
   const lookups = (await db.get("SELECT COUNT(*) AS n FROM lookups WHERE status = 'pending'")).n;
-  res.json({ latest: await latestPackage(), queued, lookups });
+  const listNames = (await db.all('SELECT name FROM lists ORDER BY LOWER(name)')).map(r => r.name);
+  res.json({ latest: await latestPackage(), queued, lookups, listNames });
 }));
 
 // Work batch: pending lookups + a few queued deliveries (claimed as inflight).
@@ -165,6 +176,16 @@ router.post('/event', wrap(async (req, res) => {
       INSERT INTO subscribers (uuid, name, source, created_at) VALUES (?, ?, 'kiosk', ?)
       ON CONFLICT (uuid) DO UPDATE SET active = 1, name = EXCLUDED.name
     `, [u, typeof name === 'string' && name ? name : u, db.now()]);
+    // Optional list choice made at the kiosk's subscribe dialog.
+    const listName = String((req.body && req.body.list) || '').trim();
+    if (listName) {
+      const l = await db.get('SELECT id FROM lists WHERE LOWER(name) = LOWER(?)', [listName]);
+      if (l) {
+        await db.run(
+          'INSERT INTO list_members (list_id, uuid) VALUES (?, ?) ON CONFLICT (list_id, uuid) DO NOTHING',
+          [l.id, u]);
+      }
+    }
   } else if (type === 'unsub') {
     await db.run('UPDATE subscribers SET active = 0 WHERE uuid = ?', [u]);
   } else {

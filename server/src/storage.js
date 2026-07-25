@@ -56,6 +56,14 @@ function schemaSql(kind) {
       ip    TEXT PRIMARY KEY,
       count INTEGER NOT NULL,
       last  TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS lists (
+      id         ${id},
+      name       TEXT NOT NULL,
+      created_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS list_members (
+      list_id INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+      uuid    TEXT NOT NULL REFERENCES subscribers(uuid) ON DELETE CASCADE,
+      PRIMARY KEY (list_id, uuid))`,
     `CREATE TABLE IF NOT EXISTS schedules (
       id         ${id},
       package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
@@ -77,6 +85,8 @@ async function initSqlite() {
   db.exec('PRAGMA wal_autocheckpoint = 1000');
   db.exec('PRAGMA foreign_keys = ON');
   for (const s of schemaSql('sqlite')) db.exec(s);
+  // migration: schedules.list_id (added after 2.0; sqlite lacks IF NOT EXISTS)
+  try { db.exec('ALTER TABLE schedules ADD COLUMN list_id INTEGER'); } catch (e) { /* exists */ }
   return {
     kind: 'sqlite',
     async all(sql, p = []) { return db.prepare(sql).all(...p); },
@@ -92,6 +102,7 @@ async function initPg() {
   types.setTypeParser(20, v => parseInt(v, 10));
   const pool = new Pool({ connectionString: config.databaseUrl, max: 3 });
   for (const s of schemaSql('pg')) await pool.query(s);
+  await pool.query('ALTER TABLE schedules ADD COLUMN IF NOT EXISTS list_id INTEGER');
   const conv = (sql) => { let i = 0; return sql.replace(/\?/g, () => '$' + (++i)); };
   return {
     kind: 'pg',
