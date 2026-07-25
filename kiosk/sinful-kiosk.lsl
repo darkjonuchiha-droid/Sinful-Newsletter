@@ -27,6 +27,8 @@ list    g_http;         // strided [request_id, type, aux]
 list    g_queries;      // strided [dataserver_id, type, lookup_id]
 list    g_dq;           // delivery queue, strided [id, uuid, pkg_json]
 list    g_results;      // report queue, strided [id, status]
+string  g_await;        // only-online delivery awaiting its DATA_ONLINE answer
+integer g_awaitTicks;
 integer g_lastHello;    // unixtime of last successful hello
 integer g_dlgChan;
 
@@ -382,6 +384,21 @@ default
         string aux = llList2String(g_queries, idx + 2);
         g_queries = llDeleteSubList(g_queries, idx, idx + 2);
 
+        if (type == "dlv") // DATA_ONLINE answer for an only-online delivery
+        {
+            integer did = (integer)llJsonGetValue(aux, ["id"]);
+            if (data == "1")
+            {
+                deliverSmart((key)llJsonGetValue(aux, ["uuid"]),
+                    llJsonGetValue(aux, ["pkg"]));
+                g_results += [did, "sent"];
+            }
+            else g_results += [did, "skipped"];
+            g_await = "";
+            finishOrContinue();
+            return;
+        }
+
         integer lid = (integer)aux;
         if (type == "n2k")
         {
@@ -489,6 +506,20 @@ default
 
     timer()
     {
+        // Waiting on an online check for an "only online" delivery?
+        if (g_await != "")
+        {
+            g_awaitTicks++;
+            if (g_awaitTicks > 40) // ~20 s, dataserver never answered
+            {
+                g_results += [(integer)llJsonGetValue(g_await, ["id"]), "skipped"];
+                integer x = llListFindList(g_queries, ["dlv"]);
+                if (x > 0) g_queries = llDeleteSubList(g_queries, x - 1, x + 1);
+                g_await = "";
+                finishOrContinue();
+            }
+            return;
+        }
         if (llGetListLength(g_dq) == 0)
         {
             // idle heartbeat
@@ -498,10 +529,19 @@ default
         }
         // drain one delivery per tick (~5 s each due to LSL sleeps)
         integer did = llList2Integer(g_dq, 0);
-        key dest = (key)llList2String(g_dq, 1);
+        string uuid = llList2String(g_dq, 1);
         string pkg = llList2String(g_dq, 2);
         g_dq = llDeleteSubList(g_dq, 0, 2);
-        deliverSmart(dest, pkg);
+        if (llJsonGetValue(pkg, ["oo"]) == "1")
+        {
+            // "only online" package: verify the recipient is in-world first
+            g_await = llList2Json(JSON_OBJECT, ["id", did, "uuid", uuid, "pkg", pkg]);
+            g_awaitTicks = 0;
+            key q = llRequestAgentData((key)uuid, DATA_ONLINE);
+            g_queries += [q, "dlv", g_await];
+            return;
+        }
+        deliverSmart((key)uuid, pkg);
         g_results += [did, "sent"];
         finishOrContinue();
     }

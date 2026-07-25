@@ -153,13 +153,17 @@ function renderPackages() {
   list.innerHTML = state.packages.map(p => {
     const stats = p.stats || {};
     const pending = stats.pending || 0, sent = stats.sent || 0, failed = stats.failed || 0;
-    const total = pending + sent + failed;
-    const chips = p.items.map(name =>
+    const skipped = stats.skipped || 0;
+    const total = pending + sent + failed + skipped;
+    let chips = p.items.map(name =>
       `<span class="item-chip ${invNames.has(name) ? '' : 'missing'}"
              title="${invNames.has(name) ? '' : 'No longer in the kiosk inventory!'}">${esc(name)}</span>`
     ).join('') || '<span class="item-chip">message only</span>';
+    if (p.only_online) {
+      chips = `<span class="item-chip oo-chip" title="Delivered only to subscribers in-world at send time">🟢 online only</span>` + chips;
+    }
     const progress = pending > 0 && total > 0
-      ? `<div class="progress"><div style="width:${Math.round(100 * sent / total)}%"></div></div>` : '';
+      ? `<div class="progress"><div style="width:${Math.round(100 * (sent + skipped) / total)}%"></div></div>` : '';
     return `
       <article class="pkg-card" data-id="${p.id}">
         <div class="pkg-top">
@@ -173,6 +177,7 @@ function renderPackages() {
           <div class="pkg-stats">
             <span>sent <b>${sent}</b></span>
             <span class="stat-pending">pending <b>${pending}</b></span>
+            ${skipped ? `<span>skipped <b>${skipped}</b></span>` : ''}
             <span class="stat-failed">failed <b>${failed}</b></span>
           </div>
           <div class="pkg-actions">
@@ -239,6 +244,7 @@ function openEditor(pkg) {
   $('#editor-title').textContent = pkg ? 'Edit package' : 'New package';
   $('#pkg-name').value = pkg ? pkg.name : '';
   $('#pkg-message').value = pkg ? pkg.message : '';
+  $('#pkg-oo').checked = !!(pkg && pkg.only_online);
   updateMsgCount();
   renderItemGrid();
   $('#editor-overlay').classList.remove('hidden');
@@ -294,6 +300,7 @@ $('#btn-pkg-save').addEventListener('click', async () => {
     name: $('#pkg-name').value.trim(),
     message: $('#pkg-message').value.trim(),
     items: [...state.editItems],
+    only_online: $('#pkg-oo').checked,
   };
   if (!body.name) return toast('Give the package a name', 'err');
   try {
@@ -704,10 +711,12 @@ async function renderLog() {
   const data = await api(`/deliveries?package_id=${logPkgId}`);
   const s = data.stats || {};
   $('#log-stats').textContent =
-    `${s.sent || 0} delivered · ${s.pending || 0} pending · ${s.failed || 0} failed` +
+    `${s.sent || 0} delivered · ${s.pending || 0} pending · ${s.skipped || 0} skipped (offline) · ${s.failed || 0} failed` +
     ` — pending means the kiosk hasn't picked it up yet (touch the kiosk → Sync to hurry it).`;
-  const statusLabel = { queued: 'pending', inflight: 'delivering…', sent: 'delivered', failed: 'failed' };
-  const cls = { queued: 'st-pending', inflight: 'st-pending', sent: 'st-sent', failed: 'st-failed' };
+  const statusLabel = { queued: 'pending', inflight: 'delivering…', sent: 'delivered',
+    skipped: 'skipped (offline)', failed: 'failed' };
+  const cls = { queued: 'st-pending', inflight: 'st-pending', sent: 'st-sent',
+    skipped: 'st-skip', failed: 'st-failed' };
   $('#log-rows').innerHTML = data.deliveries.map(d => `
     <tr>
       <td>${esc(d.name || d.uuid)}</td>

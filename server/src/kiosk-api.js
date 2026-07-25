@@ -118,7 +118,7 @@ router.get('/work', wrap(async (req, res) => {
     "SELECT id, kind, query FROM lookups WHERE status = 'pending' ORDER BY id LIMIT 5");
 
   const rows = await db.all(`
-    SELECT d.id, d.uuid, p.name, p.message, p.items
+    SELECT d.id, d.uuid, p.name, p.message, p.items, p.only_online
     FROM deliveries d JOIN packages p ON p.id = d.package_id
     WHERE d.status = 'queued' ORDER BY d.id LIMIT 3
   `);
@@ -128,7 +128,10 @@ router.get('/work', wrap(async (req, res) => {
       [db.now(), r.id]);
     deliveries.push({
       id: r.id, uuid: r.uuid,
-      pkg: { name: r.name, msg: withFooter(r.message, r.uuid), items: JSON.parse(r.items) },
+      pkg: {
+        name: r.name, msg: withFooter(r.message, r.uuid),
+        items: JSON.parse(r.items), oo: r.only_online ? 1 : 0,
+      },
     });
   }
 
@@ -141,8 +144,9 @@ router.post('/report', wrap(async (req, res) => {
   if (Array.isArray(deliveries)) {
     for (const d of deliveries) {
       if (!d || !Number.isInteger(d.id)) continue;
+      const status = ['sent', 'failed', 'skipped'].includes(d.status) ? d.status : 'sent';
       await db.run('UPDATE deliveries SET status = ?, sent_at = ? WHERE id = ?',
-        [d.status === 'failed' ? 'failed' : 'sent', db.now(), d.id]);
+        [status, db.now(), d.id]);
     }
   }
   if (Array.isArray(lookups)) {

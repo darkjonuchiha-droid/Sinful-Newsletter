@@ -281,6 +281,20 @@ textarea { resize: vertical; width: 100%; }
 .item-check.disabled { opacity: .45; cursor: not-allowed; }
 .item-check input { accent-color: var(--rose); }
 .item-type { margin-left: auto; font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.oo-check {
+  display: flex; gap: .6rem; align-items: flex-start;
+  background: var(--bg0);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: .65rem .8rem;
+  margin-bottom: 1.1rem;
+  font-size: .84rem; color: var(--muted);
+  cursor: pointer;
+}
+.oo-check input { accent-color: var(--ok); margin-top: .15rem; }
+.oo-check b { color: var(--text); }
+.oo-chip { color: var(--ok); border-color: #5ad48a44; background: #5ad48a11; }
+.st-skip { color: var(--muted); }
 .inline-warn {
   background: #d9a44115; border: 1px solid #d9a44140;
   color: var(--gold);

@@ -25,12 +25,13 @@ function schemaSql(kind) {
       source       TEXT NOT NULL DEFAULT 'admin',
       created_at   TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS packages (
-      id         ${id},
-      name       TEXT NOT NULL,
-      message    TEXT NOT NULL DEFAULT '',
-      items      TEXT NOT NULL DEFAULT '[]',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL)`,
+      id          ${id},
+      name        TEXT NOT NULL,
+      message     TEXT NOT NULL DEFAULT '',
+      items       TEXT NOT NULL DEFAULT '[]',
+      only_online INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS deliveries (
       id         ${id},
       package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
@@ -89,6 +90,7 @@ async function initSqlite() {
   // migrations (added after 2.0; sqlite lacks ADD COLUMN IF NOT EXISTS)
   try { db.exec('ALTER TABLE schedules ADD COLUMN list_id INTEGER'); } catch (e) { /* exists */ }
   try { db.exec('ALTER TABLE subscribers ADD COLUMN shadowbanned INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* exists */ }
+  try { db.exec('ALTER TABLE packages ADD COLUMN only_online INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* exists */ }
   return {
     kind: 'sqlite',
     async all(sql, p = []) { return db.prepare(sql).all(...p); },
@@ -106,6 +108,7 @@ async function initPg() {
   for (const s of schemaSql('pg')) await pool.query(s);
   await pool.query('ALTER TABLE schedules ADD COLUMN IF NOT EXISTS list_id INTEGER');
   await pool.query('ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS shadowbanned INTEGER NOT NULL DEFAULT 0');
+  await pool.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS only_online INTEGER NOT NULL DEFAULT 0');
   const conv = (sql) => { let i = 0; return sql.replace(/\?/g, () => '$' + (++i)); };
   return {
     kind: 'pg',

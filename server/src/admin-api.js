@@ -255,6 +255,7 @@ async function packageStats(id) {
     SELECT
       SUM(CASE WHEN status IN ('queued','inflight') THEN 1 ELSE 0 END) AS pending,
       SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+      SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
     FROM deliveries WHERE package_id = ?
   `, [id]);
@@ -277,15 +278,15 @@ function validPackageBody(body) {
   if (message.length > 800) return { error: 'message too long (max 800 chars — SL IM limit)' };
   if (!Array.isArray(items)) return { error: 'items must be an array' };
   items = items.filter(i => typeof i === 'string' && i.length > 0).slice(0, 42);
-  return { name, message, items };
+  return { name, message, items, onlyOnline: body && body.only_online ? 1 : 0 };
 }
 
 router.post('/packages', wrap(async (req, res) => {
   const v = validPackageBody(req.body);
   if (v.error) return res.status(400).json({ error: v.error });
   const id = await db.insert(
-    'INSERT INTO packages (name, message, items, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-    [v.name, v.message, JSON.stringify(v.items), db.now(), db.now()]);
+    'INSERT INTO packages (name, message, items, only_online, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [v.name, v.message, JSON.stringify(v.items), v.onlyOnline, db.now(), db.now()]);
   res.json({ ok: true, id });
 }));
 
@@ -293,8 +294,8 @@ router.put('/packages/:id', wrap(async (req, res) => {
   const v = validPackageBody(req.body);
   if (v.error) return res.status(400).json({ error: v.error });
   const r = await db.run(
-    'UPDATE packages SET name = ?, message = ?, items = ?, updated_at = ? WHERE id = ?',
-    [v.name, v.message, JSON.stringify(v.items), db.now(), Number(req.params.id)]);
+    'UPDATE packages SET name = ?, message = ?, items = ?, only_online = ?, updated_at = ? WHERE id = ?',
+    [v.name, v.message, JSON.stringify(v.items), v.onlyOnline, db.now(), Number(req.params.id)]);
   if (!r.changes) return res.status(404).json({ error: 'no such package' });
   res.json({ ok: true });
 }));
