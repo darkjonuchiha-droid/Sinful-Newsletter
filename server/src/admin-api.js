@@ -207,6 +207,27 @@ router.post('/subscribers', wrap(async (req, res) => {
   res.json({ ok: true, note: 'looking up name via kiosk — appears in the list once resolved' });
 }));
 
+// Re-resolve display names: clears them and drops the one-shot lookup rows
+// so /work re-queues them (used after a kiosk script update, or when
+// someone changes their display name in-world).
+router.post('/subscribers/refresh-display', wrap(async (req, res) => {
+  let uuids = (req.body && req.body.uuids) || [];
+  if (!Array.isArray(uuids)) uuids = [];
+  uuids = uuids.filter(u => typeof u === 'string' && UUID_RE.test(u))
+    .map(u => u.toLowerCase()).slice(0, 500);
+  let n;
+  if (uuids.length) {
+    const ph = uuids.map(() => '?').join(',');
+    n = (await db.run(`UPDATE subscribers SET display_name = '' WHERE uuid IN (${ph})`, uuids)).changes;
+    await db.run(`DELETE FROM lookups WHERE kind = 'key2disp' AND query IN (${ph})`, uuids);
+  } else {
+    n = (await db.run("UPDATE subscribers SET display_name = ''")).changes;
+    await db.run("DELETE FROM lookups WHERE kind = 'key2disp'");
+  }
+  await pingKiosk();
+  res.json({ ok: true, queued: n });
+}));
+
 // Bulk operations on a set of subscribers.
 router.post('/subscribers/bulk', wrap(async (req, res) => {
   const action = String((req.body && req.body.action) || '');

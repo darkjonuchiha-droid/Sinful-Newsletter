@@ -629,6 +629,16 @@ async function addSubscriber() {
   } catch (err) { toast(err.message, 'err'); }
 }
 
+$('#btn-refresh-disp').addEventListener('click', async () => {
+  if (!await confirmModal('Re-fetch display names for all subscribers from the kiosk? '
+    + 'They refresh over the next few minutes (touch the kiosk → Sync to hurry it).')) return;
+  try {
+    const r = await api('/subscribers/refresh-display', { method: 'POST', body: {} });
+    toast(`Re-fetching ${r.queued} display name(s)`, 'ok');
+    loadSubscribers();
+  } catch (err) { toast(err.message, 'err'); }
+});
+
 let searchDebounce;
 $('#sub-search').addEventListener('input', () => {
   clearTimeout(searchDebounce);
