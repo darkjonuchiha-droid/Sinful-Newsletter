@@ -17,6 +17,12 @@ const config = {
   kioskToken: process.env.KIOSK_TOKEN || '',
   // Postgres (Neon/Supabase/...) when set; embedded SQLite otherwise.
   databaseUrl: process.env.DATABASE_URL || '',
+  // Public base URL for unsubscribe links in delivery IMs. Auto-detected on
+  // Vercel; set PUBLIC_URL for self-hosted deployments (empty = no footer).
+  publicUrl: (process.env.PUBLIC_URL
+    || (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? 'https://' + process.env.VERCEL_PROJECT_PRODUCTION_URL : ''))
+    .replace(/\/+$/, ''),
   dbPath: process.env.DB_PATH || path.join(__dirname, '..', 'data', 'newsletter.db'),
   // Kiosk counts as offline when silent longer than this.
   kioskOfflineMs: 12 * 60 * 1000,

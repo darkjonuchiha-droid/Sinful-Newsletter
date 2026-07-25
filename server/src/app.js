@@ -13,7 +13,9 @@ app.use((req, res, next) => { storage.ready.then(() => next(), next); });
 
 const adminApi = require('./admin-api');
 const kioskApi = require('./kiosk-api');
+const publicRoutes = require('./public-routes');
 
+app.use(publicRoutes.router); // /u/... unsubscribe links (no auth)
 app.use('/api/kiosk', kioskApi.router);
 app.use('/api', adminApi.router);
 

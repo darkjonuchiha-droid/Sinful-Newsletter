@@ -2,7 +2,7 @@
 const express = require('express');
 const db = require('./storage');
 const config = require('./config');
-const { requireKiosk } = require('./auth');
+const { requireKiosk, unsubToken } = require('./auth');
 
 const router = express.Router();
 router.use(requireKiosk);
@@ -40,6 +40,15 @@ async function latestPackage() {
 
 async function touchKiosk() {
   await db.run('UPDATE kiosk SET last_seen = ? WHERE id = 1', [db.now()]);
+}
+
+// Per-recipient unsubscribe footer appended to delivery messages. SL viewers
+// render [url text] markup in IMs as a clickable link.
+function withFooter(msg, uuid) {
+  if (!config.publicUrl) return msg;
+  const link = `${config.publicUrl}/u/${uuid}/${unsubToken(uuid)}`;
+  const footer = `If you don't want to receive more of these newsletters, click: [${link} Unsubscribe]`;
+  return msg ? msg + '\n\n' + footer : footer;
 }
 
 // Enqueue deliveries for any schedule whose time has come. Called from the
@@ -119,7 +128,7 @@ router.get('/work', wrap(async (req, res) => {
       [db.now(), r.id]);
     deliveries.push({
       id: r.id, uuid: r.uuid,
-      pkg: { name: r.name, msg: r.message, items: JSON.parse(r.items) },
+      pkg: { name: r.name, msg: withFooter(r.message, r.uuid), items: JSON.parse(r.items) },
     });
   }
 
@@ -205,6 +214,7 @@ router.get('/latest', wrap(async (req, res) => {
       INSERT INTO deliveries (package_id, uuid, status, queued_at, sent_at)
       VALUES (?, ?, 'sent', ?, ?)
     `, [pkg.id, uuid, db.now(), db.now()]);
+    pkg.msg = withFooter(pkg.msg, uuid);
   }
   await touchKiosk();
   res.json({ latest: pkg });

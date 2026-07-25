@@ -50,6 +50,18 @@ function timingSafeEqualStr(a, b) {
   return crypto.timingSafeEqual(ba, bb);
 }
 
+// --- unsubscribe links (signed per avatar; not guessable) ---
+
+function unsubToken(uuid) {
+  return crypto.createHmac('sha256', secret)
+    .update('unsub|' + String(uuid).toLowerCase())
+    .digest('base64url').slice(0, 24);
+}
+
+function verifyUnsubToken(uuid, token) {
+  return timingSafeEqualStr(String(token || ''), unsubToken(uuid));
+}
+
 // --- middleware ---
 
 function requireAdmin(req, res, next) {
@@ -86,4 +98,5 @@ module.exports = {
   makeSessionCookie, verifySessionCookie, parseCookies,
   timingSafeEqualStr, requireAdmin, requireKiosk,
   loginAllowed, loginFailed, loginSucceeded,
+  unsubToken, verifyUnsubToken,
 };
