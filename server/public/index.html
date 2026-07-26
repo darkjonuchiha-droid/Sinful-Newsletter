@@ -6,9 +6,9 @@
 <title>Sinful Newsletter — Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,600;1,9..144,700&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,500&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💋</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23150910'/><path d='M16 7 L23 16 L16 25 L9 16 Z' fill='%23ef4066'/><circle cx='16' cy='16' r='2.6' fill='%23150910'/></svg>">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
       <div id="kiosk-pill" class="pill pill-off" title="">
         <span class="pill-dot"></span><span id="kiosk-pill-text">kiosk</span>
       </div>
-      <button id="btn-logout" class="btn btn-ghost">Log out</button>
+      <button id="btn-logout" class="btn btn-ghost btn-mini">Log out</button>
     </div>
   </header>
 
@@ -48,11 +48,11 @@
         <h2>Packages</h2>
         <p class="hint">A package = message + attachments (landmarks, notecards, objects) delivered as a folder.</p>
       </div>
-      <button id="btn-new-package" class="btn btn-primary">+ New package</button>
+      <button id="btn-new-package" class="btn btn-primary">Compose a package</button>
     </div>
     <div id="upcoming" class="upcoming hidden"></div>
     <div id="package-list" class="package-list"></div>
-    <p id="packages-empty" class="empty hidden">No packages yet — create your first one.</p>
+    <p id="packages-empty" class="empty hidden">The room is empty tonight.<em>Compose a package — a message, a landmark, an invitation — and it goes out from the kiosk.</em></p>
   </main>
 
   <!-- ---------- SUBSCRIBERS ---------- -->
@@ -70,6 +70,8 @@
       <button id="btn-refresh-disp" class="btn btn-ghost"
         title="Ask the kiosk to re-fetch every display name (use after updating the kiosk script, or when someone changes their display name)">↻ Display names</button>
       <input id="sub-search" type="search" placeholder="Search display / legacy name or UUID…">
+      <button id="btn-wide-cols" class="btn btn-ghost" aria-pressed="false"
+        title="Show full names, UUIDs and lists — columns expand to fit">⇔ Full width</button>
     </div>
     <div id="pending-lookups" class="pending-lookups hidden"></div>
     <div id="bulk-bar" class="bulk-bar hidden">
@@ -80,8 +82,8 @@
       <button class="btn btn-ghost btn-mini" data-bulk="deactivate">Deactivate</button>
       <button class="btn btn-ghost btn-mini" data-bulk="shadowban">👻 Shadow ban</button>
       <button class="btn btn-ghost btn-mini" data-bulk="unshadowban">Lift shadow ban</button>
-      <button class="btn btn-ghost btn-mini" data-bulk="delete">Delete</button>
-      <button class="btn btn-ghost btn-mini" data-bulk="clear">Clear selection</button>
+      <button class="btn btn-ghost btn-mini btn-quiet-danger" data-bulk="delete">Delete</button>
+      <button class="btn btn-ghost btn-mini btn-clear" data-bulk="clear">Clear selection</button>
     </div>
     <div class="table-wrap">
       <table class="sub-table">
@@ -167,14 +169,18 @@
 <!-- ======================= DELIVERY LOG MODAL ======================= -->
 <div id="log-overlay" class="overlay hidden">
   <div class="editor">
-    <h2 id="log-title" class="editor-title">Deliveries</h2>
-    <p id="log-stats" class="hint"></p>
-    <div id="log-audiences" class="log-audiences"></div>
-    <div class="table-wrap">
-      <table class="sub-table">
-        <thead><tr><th>Recipient</th><th>Status</th><th>Queued</th><th>Delivered</th><th></th></tr></thead>
-        <tbody id="log-rows"></tbody>
-      </table>
+    <header class="modal-head">
+      <h2 id="log-title" class="editor-title">Deliveries</h2>
+      <p id="log-stats" class="hint"></p>
+    </header>
+    <div class="modal-body">
+      <div id="log-audiences" class="log-audiences"></div>
+      <div class="table-wrap">
+        <table class="sub-table">
+          <thead><tr><th>Recipient</th><th>Status</th><th>Queued</th><th>Delivered</th><th></th></tr></thead>
+          <tbody id="log-rows"></tbody>
+        </table>
+      </div>
     </div>
     <div class="editor-actions">
       <button id="btn-log-refresh" class="btn btn-ghost">Refresh</button>
@@ -200,46 +206,61 @@
 <!-- ======================= PACKAGE EDITOR ======================= -->
 <div id="editor-overlay" class="overlay hidden">
   <div class="editor">
-    <h2 id="editor-title" class="editor-title">New package</h2>
-    <label class="field">
-      <span>Name <em>(becomes the folder name subscribers receive)</em></span>
-      <input id="pkg-name" type="text" maxlength="60" placeholder="e.g. Midnight Masquerade — Invitation">
-    </label>
-    <label class="field">
-      <span>Message <em id="pkg-msg-count">0 / 800</em></span>
-      <textarea id="pkg-message" rows="7" maxlength="800"
-        placeholder="Sent as an instant message with the folder…"></textarea>
-    </label>
-    <label class="oo-check">
-      <input type="checkbox" id="pkg-private">
-      <span><b>🔒 Private</b> — only people you send it to. Hidden from
-      “Get Latest” at kiosks and satellites, so a members-only newsletter
-      can't be picked up by anyone who walks past. Leave unticked for
-      normal public newsletters.</span>
-    </label>
-    <label class="oo-check">
-      <input type="checkbox" id="pkg-oo">
-      <span><b>Only online</b> — deliver only to subscribers who are in-world at
-      send time. Offline subscribers are skipped (no queued IMs, no spam);
-      they can still use “Get Latest” at the kiosk or you can Redeliver from
-      the Log.</span>
-    </label>
-    <div class="field">
-      <span>Attachments <em>(items currently inside the kiosk prim)</em></span>
-      <div id="pkg-kiosk-warn" class="inline-warn hidden"></div>
-      <div class="attach-panes">
-        <div class="attach-pane">
-          <h4>In this package <span id="attach-count" class="count-chip"></span></h4>
-          <div id="attached-list" class="attached-list"></div>
+    <header class="modal-head">
+      <h2 id="editor-title" class="editor-title">New package</h2>
+      <p class="hint">Message, delivery rules, and what travels in the folder.</p>
+    </header>
+
+    <div class="modal-body">
+      <section class="ed-section">
+        <h3 class="ed-legend">The message</h3>
+        <label class="field">
+          <span>Name <em>(becomes the folder name subscribers receive)</em></span>
+          <input id="pkg-name" type="text" maxlength="60" placeholder="e.g. Midnight Masquerade — Invitation">
+        </label>
+        <label class="field field-last">
+          <span>Message <em id="pkg-msg-count">0 / 800</em></span>
+          <textarea id="pkg-message" rows="7" maxlength="800"
+            placeholder="Sent as an instant message with the folder…"></textarea>
+        </label>
+      </section>
+
+      <section class="ed-section">
+        <h3 class="ed-legend">Delivery rules</h3>
+        <label class="oo-check">
+          <input type="checkbox" id="pkg-private">
+          <span><b>🔒 Private</b> — only people you send it to. Hidden from
+          “Get Latest” at kiosks and satellites, so a members-only newsletter
+          can't be picked up by anyone who walks past. Leave unticked for
+          normal public newsletters.</span>
+        </label>
+        <label class="oo-check oo-last">
+          <input type="checkbox" id="pkg-oo">
+          <span><b>🟢 Only online</b> — deliver only to subscribers who are in-world at
+          send time. Offline subscribers are skipped (no queued IMs, no spam);
+          they can still use “Get Latest” at the kiosk or you can Redeliver from
+          the Log.</span>
+        </label>
+      </section>
+
+      <section class="ed-section">
+        <h3 class="ed-legend">Attachments <em>(items currently inside the kiosk prim)</em></h3>
+        <div id="pkg-kiosk-warn" class="inline-warn hidden"></div>
+        <div class="attach-panes">
+          <div class="attach-pane">
+            <h4>In this package <span id="attach-count" class="count-chip"></span></h4>
+            <div id="attached-list" class="attached-list"></div>
+          </div>
+          <div class="attach-pane">
+            <h4>Kiosk items <em>— click to add</em></h4>
+            <div id="attach-filter" class="attach-filter"></div>
+            <input id="attach-search" type="search" placeholder="Search items…" autocomplete="off">
+            <div id="attach-avail" class="attach-avail"></div>
+          </div>
         </div>
-        <div class="attach-pane">
-          <h4>Kiosk items <em>— click to add</em></h4>
-          <div id="attach-filter" class="attach-filter"></div>
-          <input id="attach-search" type="search" placeholder="Search items…" autocomplete="off">
-          <div id="attach-avail" class="attach-avail"></div>
-        </div>
-      </div>
+      </section>
     </div>
+
     <div class="editor-actions">
       <button id="btn-pkg-cancel" class="btn btn-ghost">Cancel</button>
       <button id="btn-pkg-save" class="btn btn-primary">Save package</button>
@@ -259,6 +280,27 @@
 </div>
 
 <div id="toasts" class="toasts"></div>
+
+<script>
+// Column width toggle for the subscribers table (view-only, no API calls).
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('btn-wide-cols');
+  const table = document.querySelector('#tab-subscribers .sub-table');
+  if (!btn || !table) return;
+  const apply = (on) => {
+    table.classList.toggle('cols-wide', on);
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.textContent = on ? '⇔ Compact' : '⇔ Full width';
+  };
+  apply(localStorage.getItem('sinful.wideCols') === '1');
+  btn.addEventListener('click', () => {
+    const on = !table.classList.contains('cols-wide');
+    localStorage.setItem('sinful.wideCols', on ? '1' : '0');
+    apply(on);
+  });
+});
+</script>
 
 <script src="app.js"></script>
 </body>
