@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sinful Newsletter — Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,600;1,9..144,700&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💋</text></svg>">
+</head>
+<body>
+
+<!-- ======================= LOGIN ======================= -->
+<section id="view-login" class="login-wrap hidden">
+  <form id="login-form" class="login-card" autocomplete="off">
+    <h1 class="masthead">Sinful<span>Newsletter</span></h1>
+    <p class="login-sub">hub administration</p>
+    <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit" class="btn btn-primary btn-wide">Enter</button>
+    <p id="login-error" class="login-error"></p>
+  </form>
+</section>
+
+<!-- ======================= APP ======================= -->
+<div id="view-app" class="app hidden">
+  <header class="topbar">
+    <h1 class="masthead masthead-small">Sinful<span>Newsletter</span></h1>
+    <div class="topbar-right">
+      <div id="kiosk-pill" class="pill pill-off" title="">
+        <span class="pill-dot"></span><span id="kiosk-pill-text">kiosk</span>
+      </div>
+      <button id="btn-logout" class="btn btn-ghost">Log out</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="packages">Packages</button>
+    <button class="tab" data-tab="subscribers">Subscribers</button>
+    <button class="tab" data-tab="calendar">Calendar</button>
+  </nav>
+
+  <!-- ---------- PACKAGES ---------- -->
+  <main id="tab-packages" class="tabpane">
+    <div class="pane-head">
+      <div class="pane-title">
+        <h2>Packages</h2>
+        <p class="hint">A package = message + attachments (landmarks, notecards, objects) delivered as a folder.</p>
+      </div>
+      <button id="btn-new-package" class="btn btn-primary">+ New package</button>
+    </div>
+    <div id="upcoming" class="upcoming hidden"></div>
+    <div id="package-list" class="package-list"></div>
+    <p id="packages-empty" class="empty hidden">No packages yet — create your first one.</p>
+  </main>
+
+  <!-- ---------- SUBSCRIBERS ---------- -->
+  <main id="tab-subscribers" class="tabpane hidden">
+    <div class="pane-head">
+      <div class="pane-title">
+        <h2>Subscribers <span id="sub-count" class="count-chip"></span></h2>
+        <p class="hint">Add by UUID or legacy name — names are resolved by the in-world kiosk.</p>
+      </div>
+    </div>
+    <div id="list-chips" class="list-chips"></div>
+    <div class="sub-toolbar">
+      <input id="sub-add-input" type="text" placeholder='UUID or legacy name, e.g. "Lelouch Resident"'>
+      <button id="btn-sub-add" class="btn btn-primary">Add</button>
+      <button id="btn-refresh-disp" class="btn btn-ghost"
+        title="Ask the kiosk to re-fetch every display name (use after updating the kiosk script, or when someone changes their display name)">↻ Display names</button>
+      <input id="sub-search" type="search" placeholder="Search display / legacy name or UUID…">
+    </div>
+    <div id="pending-lookups" class="pending-lookups hidden"></div>
+    <div id="bulk-bar" class="bulk-bar hidden">
+      <span id="bulk-count"></span>
+      <button class="btn btn-primary btn-mini" data-bulk="addlist">Add to list…</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="removelist">Remove from list…</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="activate">Activate</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="deactivate">Deactivate</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="shadowban">👻 Shadow ban</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="unshadowban">Lift shadow ban</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="delete">Delete</button>
+      <button class="btn btn-ghost btn-mini" data-bulk="clear">Clear selection</button>
+    </div>
+    <div class="table-wrap">
+      <table class="sub-table">
+        <thead><tr>
+          <th><input id="sel-all" type="checkbox" title="Select all shown"></th>
+          <th>Display Name</th><th>Legacy Name</th><th>UUID</th>
+          <th>Lists</th><th>Source</th><th>Active</th><th></th>
+        </tr></thead>
+        <tbody id="sub-rows"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- ---------- CALENDAR ---------- -->
+  <main id="tab-calendar" class="tabpane hidden">
+    <div class="pane-head">
+      <div class="pane-title">
+        <h2 id="cal-title">Calendar</h2>
+        <p class="hint">Programmed and past sends — times in your local time. Tap a pending send to cancel it.</p>
+      </div>
+      <div class="cal-nav">
+        <button id="cal-prev" class="btn btn-ghost btn-mini">‹</button>
+        <button id="cal-today" class="btn btn-ghost btn-mini">Today</button>
+        <button id="cal-next" class="btn btn-ghost btn-mini">›</button>
+      </div>
+    </div>
+    <div class="cal-weekdays">
+      <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span>
+      <span>Fri</span><span>Sat</span><span>Sun</span>
+    </div>
+    <div id="cal-grid" class="cal-grid"></div>
+  </main>
+</div>
+
+<!-- ======================= MEMBERSHIP MODAL ======================= -->
+<div id="member-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="member-title"></p>
+    <div id="member-checks" class="member-checks"></div>
+    <div class="editor-actions">
+      <button id="btn-member-close" class="btn btn-primary">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= SEND-TO-ONE MODAL ======================= -->
+<div id="sendone-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="sendone-title"></p>
+    <input id="sendone-search" type="search" placeholder="Type a name — or paste any UUID…" autocomplete="off">
+    <div id="sendone-results" class="sendone-results"></div>
+    <div class="editor-actions">
+      <button id="btn-sendone-cancel" class="btn btn-ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= BULK LIST MODAL ======================= -->
+<div id="bulklist-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="bulklist-title"></p>
+    <select id="bulklist-select"></select>
+    <div class="editor-actions">
+      <button id="btn-bulklist-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="btn-bulklist-go" class="btn btn-primary">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= SEND-TO-LIST MODAL ======================= -->
+<div id="sendlist-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="sendlist-title"></p>
+    <div id="sendlist-checks" class="member-checks"></div>
+    <p class="hint">Members of several selected lists receive it only once.</p>
+    <div class="editor-actions">
+      <button id="btn-sendlist-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="btn-sendlist-go" class="btn btn-primary">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= DELIVERY LOG MODAL ======================= -->
+<div id="log-overlay" class="overlay hidden">
+  <div class="editor">
+    <h2 id="log-title" class="editor-title">Deliveries</h2>
+    <p id="log-stats" class="hint"></p>
+    <div id="log-audiences" class="log-audiences"></div>
+    <div class="table-wrap">
+      <table class="sub-table">
+        <thead><tr><th>Recipient</th><th>Status</th><th>Queued</th><th>Delivered</th><th></th></tr></thead>
+        <tbody id="log-rows"></tbody>
+      </table>
+    </div>
+    <div class="editor-actions">
+      <button id="btn-log-refresh" class="btn btn-ghost">Refresh</button>
+      <button id="btn-log-close" class="btn btn-primary">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= SCHEDULE MODAL ======================= -->
+<div id="schedule-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="schedule-title"></p>
+    <input id="schedule-dt" type="datetime-local">
+    <p id="schedule-slt" class="hint"></p>
+    <select id="schedule-list"></select>
+    <div class="editor-actions">
+      <button id="btn-schedule-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="btn-schedule-save" class="btn btn-primary">Schedule</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= PACKAGE EDITOR ======================= -->
+<div id="editor-overlay" class="overlay hidden">
+  <div class="editor">
+    <h2 id="editor-title" class="editor-title">New package</h2>
+    <label class="field">
+      <span>Name <em>(becomes the folder name subscribers receive)</em></span>
+      <input id="pkg-name" type="text" maxlength="60" placeholder="e.g. Midnight Masquerade — Invitation">
+    </label>
+    <label class="field">
+      <span>Message <em id="pkg-msg-count">0 / 800</em></span>
+      <textarea id="pkg-message" rows="7" maxlength="800"
+        placeholder="Sent as an instant message with the folder…"></textarea>
+    </label>
+    <label class="oo-check">
+      <input type="checkbox" id="pkg-private">
+      <span><b>🔒 Private</b> — only people you send it to. Hidden from
+      “Get Latest” at kiosks and satellites, so a members-only newsletter
+      can't be picked up by anyone who walks past. Leave unticked for
+      normal public newsletters.</span>
+    </label>
+    <label class="oo-check">
+      <input type="checkbox" id="pkg-oo">
+      <span><b>Only online</b> — deliver only to subscribers who are in-world at
+      send time. Offline subscribers are skipped (no queued IMs, no spam);
+      they can still use “Get Latest” at the kiosk or you can Redeliver from
+      the Log.</span>
+    </label>
+    <div class="field">
+      <span>Attachments <em>(items currently inside the kiosk prim)</em></span>
+      <div id="pkg-kiosk-warn" class="inline-warn hidden"></div>
+      <div class="attach-panes">
+        <div class="attach-pane">
+          <h4>In this package <span id="attach-count" class="count-chip"></span></h4>
+          <div id="attached-list" class="attached-list"></div>
+        </div>
+        <div class="attach-pane">
+          <h4>Kiosk items <em>— click to add</em></h4>
+          <div id="attach-filter" class="attach-filter"></div>
+          <input id="attach-search" type="search" placeholder="Search items…" autocomplete="off">
+          <div id="attach-avail" class="attach-avail"></div>
+        </div>
+      </div>
+    </div>
+    <div class="editor-actions">
+      <button id="btn-pkg-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="btn-pkg-save" class="btn btn-primary">Save package</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= CONFIRM MODAL ======================= -->
+<div id="confirm-overlay" class="overlay hidden">
+  <div class="confirm">
+    <p id="confirm-text"></p>
+    <div class="editor-actions">
+      <button id="btn-confirm-no" class="btn btn-ghost">Cancel</button>
+      <button id="btn-confirm-yes" class="btn btn-danger">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<!-- Offline demo: fake API + sample data so this file works with no server.
+     Remove this line when copying markup back into server/public/index.html. -->
+<script src="mock-api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
