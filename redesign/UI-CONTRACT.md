@@ -22,7 +22,7 @@ queries.
 
 **Package editor**
 `editor-overlay`, `editor-title`, `pkg-name`, `pkg-message`,
-`pkg-msg-count`, `pkg-pickup`, `pkg-pickup-hint`, `pkg-oo`, `pkg-kiosk-warn`,
+`pkg-msg-count`, `pkg-pickup` (+ `pkg-pickup-toggle`, `pkg-pickup-panel`, `pkg-pickup-summary`), `pkg-pickup-hint`, `pkg-oo`, `pkg-kiosk-warn`,
 `attached-list`, `attach-count`, `attach-filter`, `attach-search`,
 `attach-avail`, `btn-pkg-cancel`, `btn-pkg-save`
 

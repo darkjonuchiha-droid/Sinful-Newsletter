@@ -428,9 +428,24 @@ function renderPickup(pkg) {
       ${chosen.has(l.id) ? 'checked' : ''} ${everyone ? 'disabled' : ''}> ${esc(l.name)}
       <span class="cc-note">${l.members} member${l.members === 1 ? '' : 's'}</span></label>`);
   }
-  $('#pkg-pickup').innerHTML = rows.join('');
+  // Collapsed by default: the summary is the value, the panel is the editor.
+  // (A disclosure rather than a floating menu — the modal body scrolls, which
+  // would clip an absolutely-positioned dropdown.)
+  $('#pkg-pickup').innerHTML = `
+    <button type="button" id="pkg-pickup-toggle" class="pickup-toggle" aria-expanded="false">
+      <span id="pkg-pickup-summary"></span><span class="chev">▾</span>
+    </button>
+    <div id="pkg-pickup-panel" class="member-checks pickup-panel hidden">${rows.join('')}</div>`;
   updatePickupHint();
 }
+
+$('#pkg-pickup').addEventListener('click', (e) => {
+  if (!e.target.closest('#pkg-pickup-toggle')) return;
+  const panel = $('#pkg-pickup-panel');
+  const open = panel.classList.toggle('hidden') === false;
+  $('#pkg-pickup-toggle').setAttribute('aria-expanded', String(open));
+  $('#pkg-pickup-toggle').classList.toggle('open', open);
+});
 
 function updatePickupHint() {
   const everyone = $('#pkg-pickup input[data-pickup="0"]').checked;
@@ -441,12 +456,21 @@ function updatePickupHint() {
     if (Number(cb.dataset.pickup) > 0) cb.disabled = everyone;
   });
   const hint = $('#pkg-pickup-hint');
-  if (everyone) hint.textContent = 'Anyone can collect this at a kiosk or satellite.';
-  else if (picked.length) {
-    hint.textContent = `Only members of ${picked.map(cb => cb.dataset.pickupName).join(', ')}`
+  const summary = $('#pkg-pickup-summary');
+  const names = picked.map(cb => cb.dataset.pickupName);
+  if (everyone) {
+    if (summary) summary.textContent = 'Everyone';
+    hint.textContent = 'Anyone can collect this at a kiosk or satellite.';
+  } else if (names.length) {
+    if (summary) {
+      summary.textContent = names.length <= 2 ? names.join(' · ')
+        : `${names.length} lists — ${names[0]}, ${names[1]}…`;
+    }
+    hint.textContent = `Only members of ${names.join(', ')}`
       + ' can collect it — everyone else is served the newest package they can have.';
   } else {
-    hint.textContent = '🔒 Send-only: nobody can collect this at a kiosk. You can still send it to anyone or any list.';
+    if (summary) summary.textContent = '🔒 Send only';
+    hint.textContent = 'Nobody can collect this at a kiosk. You can still send it to anyone or any list.';
   }
 }
 

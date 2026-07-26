@@ -1056,6 +1056,25 @@ select { width: 100%; margin-bottom: .4rem; }
   color: var(--faint); font-size: .72rem; line-height: 1.35;
 }
 
+/* collapsed multi-select: the summary is the value, the panel is the editor */
+.pickup-toggle {
+  font: inherit; font-size: .86rem;
+  display: flex; align-items: center; justify-content: space-between; gap: .8rem;
+  width: 100%;
+  background: #ffffff07;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: .6rem .8rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color .16s, background .16s;
+}
+.pickup-toggle:hover { border-color: var(--muted); }
+.pickup-toggle.open { border-color: var(--rose-line); background: var(--rose-soft); }
+.pickup-toggle .chev { color: var(--faint); font-size: .7rem; transition: transform .18s; }
+.pickup-toggle.open .chev { transform: rotate(180deg); }
+.pickup-panel { margin-top: .35rem; max-height: 250px; overflow-y: auto; }
+
 /* delivery log */
 .log-audiences { display: grid; gap: .3rem; margin-bottom: 1.4rem; }
 .audience-row {
