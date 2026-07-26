@@ -908,6 +908,8 @@ select { width: 100%; margin-bottom: .4rem; }
 }
 #pkg-msg-count { font-family: "IBM Plex Mono", monospace; }
 .field input { width: 100%; }
+/* ...but a checkbox inside a field is a control, not a text box */
+.field input[type="checkbox"] { width: auto; }
 #pkg-name {
   font-family: "Fraunces", Georgia, serif; font-style: italic;
   font-size: 1.35rem; padding: .6rem .7rem;
@@ -1046,7 +1048,13 @@ select { width: 100%; margin-bottom: .4rem; }
 }
 .member-checks label:hover { border-color: var(--muted); }
 .member-checks label:has(input:checked) { border-color: var(--rose-line); background: var(--rose-soft); }
-.member-checks input { accent-color: var(--rose); }
+.member-checks input { accent-color: var(--rose); flex: none; }
+.member-checks label:has(input:disabled) { opacity: .4; cursor: not-allowed; }
+/* trailing meta on a checkbox card: member count, or what the option does */
+.member-checks .cc-note {
+  margin-left: auto; text-align: right;
+  color: var(--faint); font-size: .72rem; line-height: 1.35;
+}
 
 /* delivery log */
 .log-audiences { display: grid; gap: .3rem; margin-bottom: 1.4rem; }

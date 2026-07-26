@@ -232,13 +232,19 @@
           <div id="pkg-pickup" class="member-checks"></div>
           <p id="pkg-pickup-hint" class="hint"></p>
         </div>
-        <label class="oo-check oo-last">
-          <input type="checkbox" id="pkg-oo">
-          <span><b>🟢 Only online</b> — deliver only to subscribers who are in-world at
-          send time. Offline subscribers are skipped (no queued IMs, no spam);
-          they can still use “Get Latest” at the kiosk or you can Redeliver from
-          the Log.</span>
-        </label>
+        <div class="field field-last">
+          <span>Delivery</span>
+          <div class="member-checks">
+            <label>
+              <input type="checkbox" id="pkg-oo">
+              🟢 Only online
+              <span class="cc-note">skips subscribers who are offline</span>
+            </label>
+          </div>
+          <p class="hint">Offline subscribers are skipped rather than queued — no
+          spam. They can still use “Get Latest” at a kiosk, or you can Redeliver
+          them from the Log.</p>
+        </div>
       </section>
 
       <section class="ed-section">

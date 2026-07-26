@@ -420,12 +420,13 @@ $('#attach-avail').addEventListener('click', (e) => {
 function renderPickup(pkg) {
   const chosen = new Set((pkg && pkg.pickup_lists ? pkg.pickup_lists : []).map(l => l.id));
   const everyone = pkg ? !!pkg.is_public : true; // new packages default to everyone
-  const rows = [`<label><input type="checkbox" data-pickup="0" ${everyone ? 'checked' : ''}>
-      <b>Everyone</b> <em style="color:var(--muted)">— any resident who touches a kiosk</em></label>`];
+  const rows = [`<label><input type="checkbox" data-pickup="0" data-pickup-name="Everyone"
+      ${everyone ? 'checked' : ''}> Everyone
+      <span class="cc-note">any resident who touches a kiosk</span></label>`];
   for (const l of state.lists) {
-    rows.push(`<label><input type="checkbox" data-pickup="${l.id}" ${chosen.has(l.id) ? 'checked' : ''}
-      ${everyone ? 'disabled' : ''}> ${esc(l.name)}
-      <em style="color:var(--muted)">(${l.members})</em></label>`);
+    rows.push(`<label><input type="checkbox" data-pickup="${l.id}" data-pickup-name="${esc(l.name)}"
+      ${chosen.has(l.id) ? 'checked' : ''} ${everyone ? 'disabled' : ''}> ${esc(l.name)}
+      <span class="cc-note">${l.members} member${l.members === 1 ? '' : 's'}</span></label>`);
   }
   $('#pkg-pickup').innerHTML = rows.join('');
   updatePickupHint();
@@ -442,7 +443,8 @@ function updatePickupHint() {
   const hint = $('#pkg-pickup-hint');
   if (everyone) hint.textContent = 'Anyone can collect this at a kiosk or satellite.';
   else if (picked.length) {
-    hint.textContent = `Only members of ${picked.map(cb => cb.parentElement.textContent.trim().split('(')[0].trim()).join(', ')} can collect it — everyone else sees “nothing published yet”.`;
+    hint.textContent = `Only members of ${picked.map(cb => cb.dataset.pickupName).join(', ')}`
+      + ' can collect it — everyone else is served the newest package they can have.';
   } else {
     hint.textContent = '🔒 Send-only: nobody can collect this at a kiosk. You can still send it to anyone or any list.';
   }
