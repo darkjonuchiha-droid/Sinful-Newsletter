@@ -32,11 +32,27 @@ async function pingKiosk() {
   } catch { /* kiosk will pick work up on its next heartbeat */ }
 }
 
-// Newest PUBLIC package — private ones are never offered by "Get Latest"
-// (at the primary kiosk, at satellites, or from the kiosk's offline cache).
+// Newest package anyone may pick up (is_public = everyone). Used for the
+// kiosk's offline cache, which is shared by whoever touches it — so it must
+// never hold list-restricted content.
 async function latestPackage() {
   const p = await db.get(
     'SELECT id, name, message, items FROM packages WHERE is_public = 1 ORDER BY id DESC LIMIT 1');
+  if (!p) return null;
+  return { id: p.id, name: p.name, msg: p.message, items: JSON.parse(p.items) };
+}
+
+// Newest package THIS avatar may pick up: public to everyone, or scoped to
+// one of the lists they belong to. Send-only packages (neither) never appear.
+async function latestPackageFor(uuid) {
+  const p = await db.get(`
+    SELECT p.id, p.name, p.message, p.items FROM packages p
+    WHERE p.is_public = 1
+       OR EXISTS (SELECT 1 FROM package_pickup pp
+                  JOIN list_members m ON m.list_id = pp.list_id AND m.uuid = ?
+                  WHERE pp.package_id = p.id)
+    ORDER BY p.id DESC LIMIT 1
+  `, [uuid]);
   if (!p) return null;
   return { id: p.id, name: p.name, msg: p.message, items: JSON.parse(p.items) };
 }
@@ -279,9 +295,18 @@ router.post('/event', wrap(async (req, res) => {
 // Redelivery: latest package for one avatar (logged as a delivery).
 router.get('/latest', wrap(async (req, res) => {
   const uuid = String(req.query.uuid || '').toLowerCase();
-  const pkg = await latestPackage();
-  if (!pkg) return res.json({ latest: null });
-  if (UUID_RE.test(uuid)) {
+  if (!UUID_RE.test(uuid)) {
+    // No avatar to resolve against: only an everyone-package could apply.
+    const anon = await latestPackage();
+    await touchKiosk();
+    return res.json({ latest: anon });
+  }
+  const pkg = await latestPackageFor(uuid);
+  if (!pkg) {
+    await touchKiosk();
+    return res.json({ latest: null });
+  }
+  {
     // Shadow-banned avatars get a plausible "nothing published yet" —
     // indistinguishable from an empty newsletter on their side.
     const sub = await db.get('SELECT shadowbanned FROM subscribers WHERE uuid = ?', [uuid]);
@@ -330,7 +355,7 @@ router.post('/sat-hello', wrap(async (req, res) => {
 router.post('/request-latest', wrap(async (req, res) => {
   const uuid = String((req.body && req.body.uuid) || '').toLowerCase();
   if (!UUID_RE.test(uuid)) return res.status(400).json({ error: 'bad uuid' });
-  const pkg = await latestPackage();
+  const pkg = await latestPackageFor(uuid);
   if (!pkg) return res.json({ ok: false });
   // Shadow-banned avatars get the same plausible "nothing available".
   const sub = await db.get('SELECT shadowbanned FROM subscribers WHERE uuid = ?', [uuid]);

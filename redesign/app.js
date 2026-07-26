@@ -167,8 +167,13 @@ function renderPackages() {
     if (p.only_online) {
       chips = `<span class="item-chip oo-chip" title="Delivered only to subscribers in-world at send time">🟢 online only</span>` + chips;
     }
+    // Pickup scope: everyone (no badge), specific lists, or send-only.
     if (!p.is_public) {
-      chips = `<span class="item-chip private-chip" title="Private — never offered by Get Latest; only people you send it to receive it">🔒 private</span>` + chips;
+      const picks = p.pickup_lists || [];
+      chips = (picks.length
+        ? `<span class="item-chip private-chip" title="Only members of ${esc(picks.map(l => l.name).join(', '))} can collect this with Get Latest">🎟 ${esc(picks.map(l => l.name).join(' · '))}</span>`
+        : `<span class="item-chip private-chip" title="Send-only — never offered by Get Latest; only people you send it to receive it">🔒 send only</span>`
+      ) + chips;
     }
     const progress = pending > 0 && total > 0
       ? `<div class="progress"><div style="width:${Math.round(100 * (sent + skipped) / total)}%"></div></div>` : '';
@@ -269,7 +274,7 @@ function openEditor(pkg) {
   $('#pkg-name').value = pkg ? pkg.name : '';
   $('#pkg-message').value = pkg ? pkg.message : '';
   $('#pkg-oo').checked = !!(pkg && pkg.only_online);
-  $('#pkg-private').checked = pkg ? !pkg.is_public : false;
+  renderPickup(pkg);
   updateMsgCount();
   renderItemGrid();
   $('#editor-overlay').classList.remove('hidden');
@@ -410,6 +415,41 @@ $('#attach-avail').addEventListener('click', (e) => {
   renderAvail(); // stays in the category for multi-add
 });
 
+// -- pickup audiences: who may collect the package with "Get Latest" --
+
+function renderPickup(pkg) {
+  const chosen = new Set((pkg && pkg.pickup_lists ? pkg.pickup_lists : []).map(l => l.id));
+  const everyone = pkg ? !!pkg.is_public : true; // new packages default to everyone
+  const rows = [`<label><input type="checkbox" data-pickup="0" ${everyone ? 'checked' : ''}>
+      <b>Everyone</b> <em style="color:var(--muted)">— any resident who touches a kiosk</em></label>`];
+  for (const l of state.lists) {
+    rows.push(`<label><input type="checkbox" data-pickup="${l.id}" ${chosen.has(l.id) ? 'checked' : ''}
+      ${everyone ? 'disabled' : ''}> ${esc(l.name)}
+      <em style="color:var(--muted)">(${l.members})</em></label>`);
+  }
+  $('#pkg-pickup').innerHTML = rows.join('');
+  updatePickupHint();
+}
+
+function updatePickupHint() {
+  const everyone = $('#pkg-pickup input[data-pickup="0"]').checked;
+  const picked = [...document.querySelectorAll('#pkg-pickup input[data-pickup]:checked')]
+    .filter(cb => Number(cb.dataset.pickup) > 0);
+  // Ticking Everyone supersedes the list choices.
+  document.querySelectorAll('#pkg-pickup input[data-pickup]').forEach(cb => {
+    if (Number(cb.dataset.pickup) > 0) cb.disabled = everyone;
+  });
+  const hint = $('#pkg-pickup-hint');
+  if (everyone) hint.textContent = 'Anyone can collect this at a kiosk or satellite.';
+  else if (picked.length) {
+    hint.textContent = `Only members of ${picked.map(cb => cb.parentElement.textContent.trim().split('(')[0].trim()).join(', ')} can collect it — everyone else sees “nothing published yet”.`;
+  } else {
+    hint.textContent = '🔒 Send-only: nobody can collect this at a kiosk. You can still send it to anyone or any list.';
+  }
+}
+
+$('#pkg-pickup').addEventListener('change', updatePickupHint);
+
 function updateMsgCount() {
   $('#pkg-msg-count').textContent = `${$('#pkg-message').value.length} / 800`;
 }
@@ -421,7 +461,9 @@ $('#btn-pkg-save').addEventListener('click', async () => {
     message: $('#pkg-message').value.trim(),
     items: [...state.editItems],
     only_online: $('#pkg-oo').checked,
-    is_public: !$('#pkg-private').checked,
+    is_public: $('#pkg-pickup input[data-pickup="0"]').checked,
+    pickup_lists: [...document.querySelectorAll('#pkg-pickup input[data-pickup]:checked')]
+      .map(cb => Number(cb.dataset.pickup)).filter(n => n > 0),
   };
   if (!body.name) return toast('Give the package a name', 'err');
   try {

@@ -49,10 +49,10 @@
       3: ['a1b2c3d4-1111-4111-8111-111111111111', 'd4e5f6a7-4444-4444-8444-444444444444', '29dae1f2-9999-4999-8999-999999999999'],
     },
     packages: [
-      { id: 4, name: 'Midnight Masquerade — Invitation', message: 'Masks on, inhibitions off. Doors at 8pm SLT this Saturday at Sinful Isle.\n\nWear the enclosed invitation and touch it to unwrap your landmark, dress code card and a little gift.', items: ['Aphrodisia Masquerade Invitation'], only_online: 0, is_public: 1, created_at: iso(2 * HOUR), updated_at: iso(2 * HOUR) },
-      { id: 3, name: 'VIP — Private Afterparty', message: 'Just for our inner circle. Landmark inside; please don\'t reshare.', items: ['VIP Loft LM', 'Afterparty Rules'], only_online: 0, is_public: 0, created_at: iso(2 * DAY), updated_at: iso(2 * DAY) },
-      { id: 2, name: 'Summer Sunday Orgy', message: 'Join us for a chill morning of Sunday debauchery and pleasure.', items: ['Sunday LM', 'Sinful Gift Box'], only_online: 1, is_public: 1, created_at: iso(6 * DAY), updated_at: iso(6 * DAY) },
-      { id: 1, name: 'Weekly Notice — Schedule', message: 'This week at Sinful: Thursday DJ night, Friday latex social, Sunday morning orgy. Landmarks enclosed.', items: ['Club LM', 'Weekly Schedule Notecard', 'Missing Gift Box'], only_online: 0, is_public: 1, created_at: iso(9 * DAY), updated_at: iso(9 * DAY) },
+      { id: 4, name: 'Midnight Masquerade — Invitation', message: 'Masks on, inhibitions off. Doors at 8pm SLT this Saturday at Sinful Isle.\n\nWear the enclosed invitation and touch it to unwrap your landmark, dress code card and a little gift.', items: ['Aphrodisia Masquerade Invitation'], only_online: 0, is_public: 1, pickup_lists: [], created_at: iso(2 * HOUR), updated_at: iso(2 * HOUR) },
+      { id: 3, name: 'VIP — Private Afterparty', message: 'Just for our inner circle. Landmark inside; please don\'t reshare.', items: ['VIP Loft LM', 'Afterparty Rules'], only_online: 0, is_public: 0, pickup_lists: [{ id: 1, name: 'Orgy Nights' }], created_at: iso(2 * DAY), updated_at: iso(2 * DAY) },
+      { id: 2, name: 'Summer Sunday Orgy', message: 'Join us for a chill morning of Sunday debauchery and pleasure.', items: ['Sunday LM', 'Sinful Gift Box'], only_online: 1, is_public: 1, pickup_lists: [], created_at: iso(6 * DAY), updated_at: iso(6 * DAY) },
+      { id: 1, name: 'Weekly Notice — Schedule', message: 'This week at Sinful: Thursday DJ night, Friday latex social, Sunday morning orgy. Landmarks enclosed.', items: ['Club LM', 'Weekly Schedule Notecard', 'Missing Gift Box'], only_online: 0, is_public: 0, pickup_lists: [], created_at: iso(9 * DAY), updated_at: iso(9 * DAY) },
     ],
     stats: {
       4: { pending: 3, sent: 6, skipped: 0, failed: 0, reached: 6, audiences: ['All subscribers'] },
@@ -227,6 +227,8 @@
       db.packages.unshift({
         id, name: body.name, message: body.message, items: body.items || [],
         only_online: body.only_online ? 1 : 0, is_public: body.is_public === false ? 0 : 1,
+        pickup_lists: (body.pickup_lists || []).map(lid =>
+          db.lists.find(l => l.id === lid)).filter(Boolean).map(l => ({ id: l.id, name: l.name })),
         created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       });
       db.stats[id] = { pending: 0, sent: 0, skipped: 0, failed: 0, reached: 0, audiences: [] };
@@ -239,6 +241,8 @@
         if (p) Object.assign(p, {
           name: body.name, message: body.message, items: body.items || [],
           only_online: body.only_online ? 1 : 0, is_public: body.is_public === false ? 0 : 1,
+          pickup_lists: (body.pickup_lists || []).map(lid =>
+            db.lists.find(l => l.id === lid)).filter(Boolean).map(l => ({ id: l.id, name: l.name })),
           updated_at: new Date().toISOString(),
         });
         return json({ ok: true });

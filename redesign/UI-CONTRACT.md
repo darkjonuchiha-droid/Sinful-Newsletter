@@ -22,7 +22,7 @@ queries.
 
 **Package editor**
 `editor-overlay`, `editor-title`, `pkg-name`, `pkg-message`,
-`pkg-msg-count`, `pkg-private`, `pkg-oo`, `pkg-kiosk-warn`,
+`pkg-msg-count`, `pkg-pickup`, `pkg-pickup-hint`, `pkg-oo`, `pkg-kiosk-warn`,
 `attached-list`, `attach-count`, `attach-filter`, `attach-search`,
 `attach-avail`, `btn-pkg-cancel`, `btn-pkg-save`
 
@@ -58,6 +58,7 @@ queries.
 | `data-list` / `data-newlist` / `data-dellist` | list chips |
 | `data-list-id` | membership checkboxes |
 | `data-send-list` | send-to-list checkboxes |
+| `data-pickup` | package editor's Get-Latest pickup checkboxes (`0` = everyone, otherwise a list id) |
 | `data-attach-cat` / `data-attach-back` / `data-additem` / `data-detach` | attachment picker |
 | `data-sendone-uuid` | send-to-one results |
 | `data-bulk` | bulk bar buttons: `addlist`, `removelist`, `activate`, `deactivate`, `shadowban`, `unshadowban`, `delete`, `clear` |

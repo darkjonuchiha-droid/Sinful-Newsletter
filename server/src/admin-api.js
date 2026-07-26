@@ -324,12 +324,37 @@ async function packageStats(id) {
 
 router.get('/packages', wrap(async (req, res) => {
   const rows = await db.all('SELECT * FROM packages ORDER BY id DESC');
+  // Pickup audiences per package (assembled in JS to stay driver-portable).
+  const pick = await db.all(`
+    SELECT pp.package_id, pp.list_id, l.name FROM package_pickup pp
+    JOIN lists l ON l.id = pp.list_id
+  `);
+  const byPkg = {};
+  for (const r of pick) {
+    (byPkg[r.package_id] = byPkg[r.package_id] || []).push({ id: r.list_id, name: r.name });
+  }
   const packages = [];
   for (const p of rows) {
-    packages.push({ ...p, items: JSON.parse(p.items), stats: await packageStats(p.id) });
+    packages.push({
+      ...p,
+      items: JSON.parse(p.items),
+      pickup_lists: byPkg[p.id] || [],
+      stats: await packageStats(p.id),
+    });
   }
   res.json({ packages });
 }));
+
+// Replace a package's pickup audiences.
+async function setPickup(packageId, listIds) {
+  await db.run('DELETE FROM package_pickup WHERE package_id = ?', [packageId]);
+  for (const lid of listIds) {
+    if (!await db.get('SELECT id FROM lists WHERE id = ?', [lid])) continue;
+    await db.run(
+      'INSERT INTO package_pickup (package_id, list_id) VALUES (?, ?) ON CONFLICT (package_id, list_id) DO NOTHING',
+      [packageId, lid]);
+  }
+}
 
 function validPackageBody(body) {
   const name = String((body && body.name) || '').trim();
@@ -339,11 +364,17 @@ function validPackageBody(body) {
   if (message.length > 800) return { error: 'message too long (max 800 chars — SL IM limit)' };
   if (!Array.isArray(items)) return { error: 'items must be an array' };
   items = items.filter(i => typeof i === 'string' && i.length > 0).slice(0, 42);
+  // Who may self-serve this with "Get Latest": everyone (is_public), or the
+  // members of specific lists, or — if neither — nobody (send-only).
+  let pickup = (body && body.pickup_lists) || [];
+  if (!Array.isArray(pickup)) pickup = [];
+  pickup = [...new Set(pickup.map(Number).filter(n => Number.isInteger(n) && n > 0))].slice(0, 32);
   return {
     name, message, items,
     onlyOnline: body && body.only_online ? 1 : 0,
     // Absent (older clients) = public, matching prior behavior.
     isPublic: body && 'is_public' in body ? (body.is_public ? 1 : 0) : 1,
+    pickup,
   };
 }
 
@@ -354,6 +385,7 @@ router.post('/packages', wrap(async (req, res) => {
     `INSERT INTO packages (name, message, items, only_online, is_public, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [v.name, v.message, JSON.stringify(v.items), v.onlyOnline, v.isPublic, db.now(), db.now()]);
+  await setPickup(id, v.pickup);
   res.json({ ok: true, id });
 }));
 
@@ -366,6 +398,7 @@ router.put('/packages/:id', wrap(async (req, res) => {
     [v.name, v.message, JSON.stringify(v.items), v.onlyOnline, v.isPublic,
       db.now(), Number(req.params.id)]);
   if (!r.changes) return res.status(404).json({ error: 'no such package' });
+  await setPickup(Number(req.params.id), v.pickup);
   res.json({ ok: true });
 }));
 

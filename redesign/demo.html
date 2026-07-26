@@ -227,13 +227,11 @@
 
       <section class="ed-section">
         <h3 class="ed-legend">Delivery rules</h3>
-        <label class="oo-check">
-          <input type="checkbox" id="pkg-private">
-          <span><b>🔒 Private</b> — only people you send it to. Hidden from
-          “Get Latest” at kiosks and satellites, so a members-only newsletter
-          can't be picked up by anyone who walks past. Leave unticked for
-          normal public newsletters.</span>
-        </label>
+        <div class="field">
+          <span>Get Latest pickup <em>who can collect this at a kiosk</em></span>
+          <div id="pkg-pickup" class="member-checks"></div>
+          <p id="pkg-pickup-hint" class="hint"></p>
+        </div>
         <label class="oo-check oo-last">
           <input type="checkbox" id="pkg-oo">
           <span><b>🟢 Only online</b> — deliver only to subscribers who are in-world at

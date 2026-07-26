@@ -74,6 +74,14 @@ function schemaSql(kind) {
       list_id INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
       uuid    TEXT NOT NULL REFERENCES subscribers(uuid) ON DELETE CASCADE,
       PRIMARY KEY (list_id, uuid))`,
+    /* Which audiences may self-serve a package with "Get Latest".
+       packages.is_public = 1 means everyone; otherwise only members of the
+       lists listed here. Neither = nobody (send-only). Declared after
+       packages and lists so the foreign keys resolve on Postgres. */
+    `CREATE TABLE IF NOT EXISTS package_pickup (
+      package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+      list_id    INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+      PRIMARY KEY (package_id, list_id))`,
     `CREATE TABLE IF NOT EXISTS schedules (
       id         ${id},
       package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
